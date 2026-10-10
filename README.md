@@ -2,7 +2,7 @@
 
 An app that allows you to control and view Spotify music straight from your wallpaper
 
-with the app being based off of C++ and Microsoft Edge WebView2 it is extremely optimized and uses very few resources
+with C++ and Microsoft Edge WebView2 as the backend it is extremely optimized and uses very few resources
 ## Downloads
 
 - [Portable build](https://github.com/NotMe3555/SpotifyWallpaper/releases/latest/download/SpotifyWallpaper-portable.zip)
