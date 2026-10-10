@@ -22,7 +22,6 @@ With it being based off of C++ and Microsoft Edge WebView2 it is extremely optim
   <img src="assets/screenshots/app-settings.png" alt="Spotify Wallpaper display settings window, centered with transparent margins" width="32%">
 </p>
 
-The portable build needs no installation. Extract it to a writable folder and run `SpotifyWallpaper.exe`. The installer sets up a per-user copy and adds Start menu shortcuts.
 
 ## Requirements
 
