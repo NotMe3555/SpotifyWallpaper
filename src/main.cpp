@@ -92,7 +92,7 @@ const std::vector<Row> kRows = {
     {kTabDisplay, "interactive", L"Clickable wallpaper", L"Click and scroll on the desktop to control playback.", {}},
     {kTabDisplay, "pauseCovered", L"Pause when covered", L"Saves power while a maximized or fullscreen app is in front.",
      {}},
-    {kTabDisplay, "startup", L"Launch at Windows startup", L"Runs quietly in the tray so the wallpaper is always live.",
+    {kTabAccount, "startup", L"Launch at Windows startup", L"Runs quietly in the tray so the wallpaper is always live.",
      {}},
 
     {kTabCustomize, "position", L"Layout", L"Where the player sits on screen.",
@@ -874,6 +874,9 @@ void drawAccountTab(D2D1_COLOR_F accent) {
   iconButton(kEyeYoutube, rect(R1 - 38, kYoutubeFieldY + 4, 32, 32), g.youtubeVisible ? kGlyphHide : kGlyphShow);
   text(L"Lets the wallpaper find official music videos (Customize tab).",
        {R0, kYoutubeFieldY + kFieldH + 6, R1, kYoutubeFieldY + kFieldH + 24}, g.fSmall.Get(), kText3);
+
+  for (size_t i = 0; i < kRows.size(); ++i)
+    if (kRows[i].tab == kTabAccount) drawRow(i, 565, 36, accent);
 }
 
 
