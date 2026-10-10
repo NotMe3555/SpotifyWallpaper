@@ -44,6 +44,11 @@
       <h1 class="title" id="title">Quiet for now</h1>
       <p class="artist" id="artist">Start something on Spotify</p>
       <p class="album" id="album"></p>
+      <div class="lyrics lyrics--player" id="lyricsPlayer" aria-live="polite" aria-label="Song lyrics">
+        <div class="lyrics__line lyrics__line--previous" id="lyricsPlayerPrevious"></div>
+        <div class="lyrics__line lyrics__line--active" id="lyricsPlayerActive"></div>
+        <div class="lyrics__line lyrics__line--next" id="lyricsPlayerNext"></div>
+      </div>
 
       <div class="progress">
         <div class="progress__track" id="progressTrack">
@@ -80,6 +85,12 @@
       <div class="device" id="device"></div>
     </section>
   </main>
+
+  <div class="lyrics lyrics--screen" id="lyricsScreen" aria-live="polite" aria-label="Song lyrics">
+    <div class="lyrics__line lyrics__line--previous" id="lyricsScreenPrevious"></div>
+    <div class="lyrics__line lyrics__line--active" id="lyricsScreenActive"></div>
+    <div class="lyrics__line lyrics__line--next" id="lyricsScreenNext"></div>
+  </div>
 
 
   <div class="connect" id="connect">

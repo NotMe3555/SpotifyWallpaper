@@ -20,7 +20,7 @@ std::mutex g_refreshMutex;
 std::wstring g_configFile, g_tokenFile;
 Credentials g_creds;
 
-const char* const kSecretNames[] = {"youtubeKey", "discordToken"};
+const char* const kSecretNames[] = {"youtubeKey"};
 std::map<std::string, std::string> g_secrets;
 Tokens g_tokens;
 std::map<std::string, int64_t> g_pendingStates;
@@ -176,8 +176,6 @@ bool saveSecret(const char* name, const std::string& value) {
 
 std::string youtubeKey() { return secret("youtubeKey"); }
 bool saveYoutubeKey(const std::string& key) { return saveSecret("youtubeKey", key); }
-std::string discordToken() { return secret("discordToken"); }
-bool saveDiscordToken(const std::string& token) { return saveSecret("discordToken", token); }
 
 bool isConnected() {
   std::lock_guard<std::mutex> lock(g_mutex);

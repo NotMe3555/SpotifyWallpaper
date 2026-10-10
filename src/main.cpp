@@ -23,12 +23,10 @@
 
 #include "audio.h"
 #include "auth.h"
-#include "discord_bot.h"
 #include "resource.h"
 #include "server.h"
 #include "settings.h"
 #include "spotify.h"
-#include "spotify_capture.h"
 #include "util.h"
 #include "wallpaper.h"
 #include "youtube.h"
@@ -52,20 +50,19 @@ constexpr float kBaseW = 860, kBaseH = 642, kBaseLeftW = 340;
 constexpr float kMinZoom = 0.62f, kMaxZoom = 1.3f;
 constexpr float kFieldH = 40;
 constexpr float kContentY = 140;
-constexpr float kIdFieldY = 184, kSecretFieldY = 256, kRedirectFieldY = 328, kYoutubeFieldY = 496,
-                kDiscordFieldY = 184;
+constexpr float kIdFieldY = 184, kSecretFieldY = 256, kRedirectFieldY = 328, kYoutubeFieldY = 496;
 
 enum : UINT {
   WM_APP_AUTH = WM_APP + 1, WM_APP_PLAYER, WM_APP_ART, WM_APP_TOAST, WM_APP_TRAY, WM_APP_NAME, WM_APP_SHOW,
-  WM_APP_SPECTRUM, WM_APP_DISCORD
+  WM_APP_SPECTRUM
 };
 
 enum Hit { kNone, kPrev, kPlay, kNext, kEye, kCopyRedirect, kDashboard, kConnect, kCopyUrl, kOpenUrl, kReset,
-           kEyeYoutube, kYoutubeLink, kEyeDiscord, kDiscordPortal, kInvite, kLeave };
+           kEyeYoutube, kYoutubeLink };
 constexpr int kTabHit = 100, kRowHit = 200, kHitMax = 400;
-enum Tab { kTabAccount, kTabDisplay, kTabCustomize, kTabDiscord, kTabCount };
-const wchar_t* const kTabNames[kTabCount] = {L"Account", L"Display", L"Customize", L"Discord"};
-enum { kEditId = 101, kEditSecret = 102, kEditYoutube = 103, kEditDiscord = 104, kTimerAnim = 1, kTrayId = 1 };
+enum Tab { kTabAccount, kTabDisplay, kTabCustomize, kTabCount };
+const wchar_t* const kTabNames[kTabCount] = {L"Account", L"Display", L"Customize"};
+enum { kEditId = 101, kEditSecret = 102, kEditYoutube = 103, kTimerAnim = 1, kTrayId = 1 };
 enum { kMenuOpen = 1, kMenuWallpaper, kMenuToggleWallpaper, kMenuQuit };
 
 
@@ -150,11 +147,6 @@ const std::vector<Row> kRows = {
     {kTabCustomize, "device", L"“Listening on” device", L"", {}},
     {kTabCustomize, "idleFade", L"Fade controls when the mouse is idle", L"", {}},
 
-    {kTabDiscord, "discordBot", L"Run the bot", L"Comes online whenever Spotify Wallpaper is running.", {}},
-    {kTabDiscord, "audioOutput", L"Play music on", L"Where Spotify's audio goes.",
-     {{"speakers", L"This PC"}, {"discord", L"Discord only"}, {"both", L"This PC and Discord"}}},
-    {kTabDiscord, "discordPresence", L"Show what I'm listening to", L"Sets the bot's status to the current song.",
-     {}},
 };
 
 
@@ -198,7 +190,7 @@ const COLORREF kFieldRef = RGB(0x18, 0x1A, 0x20), kTextRef = RGB(0xEE, 0xF0, 0xF
 
 struct App {
   HINSTANCE inst{};
-  HWND hwnd{}, editId{}, editSecret{}, editYoutube{}, editDiscord{};
+  HWND hwnd{}, editId{}, editSecret{}, editYoutube{};
   UINT dpi = 96;
   float scale = 1;
   HFONT editFont{};
@@ -232,7 +224,7 @@ struct App {
   std::vector<float> rowOn;
   int tab = kTabAccount;
   float tabAnim = 0;
-  bool secretVisible = false, youtubeVisible = false, discordVisible = false;
+  bool secretVisible = false, youtubeVisible = false;
 
   spotify::Player player;
   Clock::time_point syncedAt, playLockUntil, start, lastTick;
@@ -900,73 +892,6 @@ void drawWebAddress(float y) {
   iconButton(kOpenUrl, rect(R1 - 38, fy + 4, 32, 32), kGlyphOpen);
 }
 
-void drawDiscordTab(D2D1_COLOR_F accent) {
-  const float R0 = g.R0, R1 = g.R1;
-  auto st = discordbot::status();
-  sectionLabel(L"DISCORD BOT", kContentY);
-  {
-    std::wstring link = L"Developer portal";
-    float lw = measure(link, g.fSmall.Get());
-    D2D1_RECT_F r = {R1 - lw - 20, kContentY - 4, R1, kContentY + 18};
-    float h = ease(g.anim[kDiscordPortal]);
-    addHot(r, kDiscordPortal);
-    D2D1_COLOR_F c = mix(alpha(accent, .85f), accent, h);
-    text(link, {r.left, r.top, r.right - 18, r.bottom}, g.fSmall.Get(), c);
-    text(kGlyphOpen, {r.right - 14, r.top, r.right, r.bottom}, g.fIcon.Get(), c, DWRITE_TEXT_ALIGNMENT_CENTER);
-  }
-  text(L"Bot token", {R0, kDiscordFieldY - 22, R1, kDiscordFieldY - 4}, g.fFieldLabel.Get(), kText2);
-  field({R0, kDiscordFieldY, R1, kDiscordFieldY + kFieldH}, g.focusedEdit == kEditDiscord, accent);
-  iconButton(kEyeDiscord, rect(R1 - 38, kDiscordFieldY + 4, 32, 32), g.discordVisible ? kGlyphHide : kGlyphShow);
-
-
-  D2D1_RECT_F card = {R0, 238, R1, 296};
-  fillRound(card, 12, hex(0xFFFFFF, .03f));
-  strokeRound(card, 12, kLine);
-  using discordbot::State;
-  bool hasToken = !auth::discordToken().empty();
-  D2D1_COLOR_F dot = st.state == State::Online       ? kGreen
-                     : st.state == State::Connecting ? kAmber
-                     : st.state == State::Error      ? kRed
-                                                     : alpha(kText3, .8f);
-  fillCircle(R0 + 18, 257, 6.5f, alpha(dot, .22f));
-  fillCircle(R0 + 18, 257, 3.5f, dot);
-  std::wstring line1 = st.state == State::Online       ? L"Online as " + widen(st.botName)
-                       : st.state == State::Connecting ? L"Connecting\u2026"
-                       : st.state == State::Error      ? L"Couldn't connect"
-                       : !hasToken                     ? L"Paste a bot token to bring it online"
-                       : settings::on("discordBot")    ? L"Offline"
-                                                       : L"Turned off";
-  std::wstring line2;
-  D2D1_COLOR_F line2Color = kText3;
-  if (st.state == State::Error) {
-    line2 = widen(st.error);
-    line2Color = kRed;
-  } else if (st.state == State::Online) {
-    line2 = st.guild.empty() ? L"Not in a voice channel \u2014 type /join in Discord"
-                             : L"In " + widen(st.guild) + L" \u203A " + widen(st.channel) +
-                                   (st.streaming ? L"  \u00B7  streaming" : L"");
-    if (st.streaming) line2Color = kGreen;
-  } else if (!hasToken) {
-    line2 = L"Create an app in the Developer portal, add a bot, and copy its token.";
-  }
-  float right = R1 - 12;
-  int button = st.state == State::Online ? (st.guild.empty() ? kInvite : kLeave) : kNone;
-  if (button) {
-    std::wstring label = button == kInvite ? L"Invite to a server" : L"Leave voice";
-    float bw = measure(label, g.fSmall.Get()) + 28;
-    D2D1_RECT_F b = {R1 - 12 - bw, 252, R1 - 12, 282};
-    float h = ease(g.anim[button]);
-    addHot(b, button);
-    fillRound(b, 9, mix(hex(0xFFFFFF, .07f), hex(0xFFFFFF, .13f), h));
-    strokeRound(b, 9, kLine);
-    text(label, b, g.fSmall.Get(), kText, DWRITE_TEXT_ALIGNMENT_CENTER);
-    right = b.left - 10;
-  }
-  text(line1, {R0 + 32, 245, right, 268}, g.fBody.Get(), kText);
-  text(line2, {R0 + 32, 267, right, 287}, g.fSmall.Get(), line2Color);
-}
-
-
 void drawCustomizeTab(D2D1_COLOR_F accent) {
   const float R0 = g.R0, R1 = g.R1;
   D2D1_RECT_F view = {R0 - 12, kContentY - 10, R1 + 20, g.H - 44};
@@ -1066,17 +991,13 @@ void drawSettings(D2D1_COLOR_F accent) {
   } else if (g.tab == kTabCustomize) {
     drawCustomizeTab(accent);
   } else {
-    if (g.tab == kTabDiscord) drawDiscordTab(accent);
-    float y = g.tab == kTabDiscord ? 312.f : kContentY;
+    float y = kContentY;
     for (size_t i = 0; i < kRows.size(); ++i) {
       if (kRows[i].tab != g.tab) continue;
       drawRow(i, y, 40, accent);
       y += 52;
     }
     if (g.tab == kTabDisplay) drawWebAddress(y + 8);
-    if (g.tab == kTabDiscord)
-      text(L"Commands in Discord:  /join  \u00B7  /leave  \u00B7  /nowplaying", {R0, y, R1, y + 20}, g.fSmall.Get(),
-           kText3);
   }
 
 
@@ -1132,7 +1053,7 @@ void createEditFont() {
   SelectObject(dc, old);
   ReleaseDC(g.hwnd, dc);
   g.editLineH = tm.tmHeight + 2;
-  for (HWND e : {g.editId, g.editSecret, g.editYoutube, g.editDiscord}) {
+  for (HWND e : {g.editId, g.editSecret, g.editYoutube}) {
     SendMessageW(e, WM_SETFONT, (WPARAM)g.editFont, TRUE);
     SendMessageW(e, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
   }
@@ -1162,10 +1083,8 @@ void layout() {
   placeEdit(g.editId, kIdFieldY, 14);
   placeEdit(g.editSecret, kSecretFieldY, 46);
   placeEdit(g.editYoutube, kYoutubeFieldY, 46);
-  placeEdit(g.editDiscord, kDiscordFieldY, 46);
   int show = g.tab == kTabAccount ? SW_SHOW : SW_HIDE;
   for (HWND e : {g.editId, g.editSecret, g.editYoutube}) ShowWindow(e, show);
-  ShowWindow(g.editDiscord, g.tab == kTabDiscord ? SW_SHOW : SW_HIDE);
 }
 
 SIZE windowSizeFor(float clientW, float clientH) {
@@ -1269,21 +1188,7 @@ void trayMenu(int x, int y) {
 
 
 
-void startBot() {
-  if (settings::on("discordBot")) discordbot::start(auth::discordToken(), g.hwnd, WM_APP_DISCORD);
-  else discordbot::stop();
-}
-
 bool saveFields() {
-  std::string token = editText(g.editDiscord);
-  if (token != auth::discordToken()) {
-    if (auth::saveDiscordToken(token)) {
-      showToast(token.empty() ? L"Bot token removed" : L"Bot token saved");
-      startBot();
-    } else {
-      showToast(L"Couldn't save config.json");
-    }
-  }
   std::string yt = editText(g.editYoutube);
   if (yt != auth::youtubeKey()) {
     if (auth::saveYoutubeKey(yt)) showToast(yt.empty() ? L"YouTube key removed" : L"YouTube key saved");
@@ -1344,15 +1249,6 @@ void applySetting(const std::string& key) {
     }
   } else if (key == "monitor" || key == "interactive" || key == "pauseCovered") {
     wallpaper::setOptions(wallpaperOptions());
-  } else if (key == "discordBot") {
-    startBot();
-  } else if (key == "audioOutput") {
-    std::string v = settings::get("audioOutput");
-    discordbot::setOutput(v == "discord" ? discordbot::Output::Discord
-                          : v == "both"  ? discordbot::Output::Both
-                                         : discordbot::Output::Speakers);
-  } else if (key == "discordPresence") {
-    discordbot::setPresenceEnabled(settings::on("discordPresence"));
   } else {
     pushLookToWallpaper();
   }
@@ -1475,18 +1371,6 @@ void onClick(int id) {
       showToast(L"Copied to clipboard");
       break;
     case kDashboard: openUrl(L"https://developer.spotify.com/dashboard"); break;
-    case kDiscordPortal: openUrl(L"https://discord.com/developers/applications"); break;
-    case kInvite: {
-      std::string url = discordbot::inviteUrl();
-      if (!url.empty()) openUrl(widen(url));
-      break;
-    }
-    case kLeave: discordbot::leaveVoice(); break;
-    case kEyeDiscord:
-      g.discordVisible = !g.discordVisible;
-      SendMessageW(g.editDiscord, EM_SETPASSWORDCHAR, g.discordVisible ? 0 : 0x25CF, 0);
-      InvalidateRect(g.editDiscord, nullptr, TRUE);
-      break;
     case kYoutubeLink: openUrl(L"https://console.cloud.google.com/apis/library/youtube.googleapis.com"); break;
     case kEyeYoutube:
       g.youtubeVisible = !g.youtubeVisible;
@@ -1538,11 +1422,10 @@ void pollLoop() {
   while (!g.quitting) {
     DWORD wait = 5000;
     bool visible = IsWindowVisible(g.hwnd) && !IsIconic(g.hwnd);
-    bool botOnline = discordbot::status().state == discordbot::State::Online;
     if (!auth::isConnected()) {
       needName = true;
       lastArt.clear();
-    } else if (visible || botOnline) {
+    } else if (visible) {
       if (needName) {
         std::string name = spotify::fetchDisplayName();
         if (!name.empty()) {
@@ -1586,8 +1469,6 @@ void onPlayer(std::unique_ptr<spotify::Player> p) {
   g.syncedAt = Clock::now();
   if (!g.player.hasItem && oldHas) setArt(nullptr);
   if (g.player.hasItem != oldHas || g.player.artUrl != oldUrl) updateTrayTip();
-  discordbot::setNowPlaying(g.player.hasItem ? g.player.title : "", g.player.artist, g.player.album,
-                            g.player.artUrl, g.player.hasItem && g.player.playing);
   invalidate();
 }
 
@@ -1688,7 +1569,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_COMMAND: {
       int id = LOWORD(wp), code = HIWORD(wp);
-      if (id == kEditId || id == kEditSecret || id == kEditYoutube || id == kEditDiscord) {
+      if (id == kEditId || id == kEditSecret || id == kEditYoutube) {
         if (code == EN_SETFOCUS) g.focusedEdit = id;
         if (code == EN_KILLFOCUS) {
           if (g.focusedEdit == id) g.focusedEdit = 0;
@@ -1777,10 +1658,6 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       wallpaper::postJson(json + L"]}");
       return 0;
     }
-    case WM_APP_DISCORD:
-      discordbot::sync();
-      invalidate();
-      return 0;
     case WM_APP_SHOW: showWindow(); return 0;
     case WM_APP_TRAY:
       switch (LOWORD(lp)) {
@@ -1798,7 +1675,6 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       break;
     case WM_DESTROY: {
       audio::stop();
-      discordbot::stop();
       wallpaper::stop();
       NOTIFYICONDATAW nid = trayData();
       Shell_NotifyIconW(NIM_DELETE, &nid);
@@ -1880,7 +1756,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
   g.editId = makeEdit(kEditId, creds.clientId, L"Paste your app's Client ID", 0);
   g.editSecret = makeEdit(kEditSecret, creds.clientSecret, L"Paste your app's Client Secret", ES_PASSWORD);
   g.editYoutube = makeEdit(kEditYoutube, auth::youtubeKey(), L"Paste a YouTube Data API key", ES_PASSWORD);
-  g.editDiscord = makeEdit(kEditDiscord, auth::discordToken(), L"Paste your bot's token", ES_PASSWORD);
   if (creds.fromEnvironment)
     for (HWND e : {g.editId, g.editSecret}) SendMessageW(e, EM_SETREADONLY, TRUE, 0);
 
@@ -1897,11 +1772,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
   if (!g.serverError.empty()) showToast(widen(g.serverError));
   if (settings::on("desktop")) applySetting("desktop");
   updateAudio();
-  spotifycap::recoverMixer();
-  applySetting("audioOutput");
-  discordbot::setPresenceEnabled(settings::on("discordPresence"));
-  startBot();
-
   std::thread(pollLoop).detach();
 
   MSG msg;

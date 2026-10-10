@@ -1,12 +1,25 @@
 # Spotify Wallpaper
 
-A Windows live wallpaper that shows the song playing on Spotify, with playback controls, visualizers, synced lyrics, and optional music videos. It also includes an optional Discord bot.
+A Windows live wallpaper that shows the song playing on Spotify, with playback controls, visualizers, synced lyrics, and optional music videos.
 
 ## Downloads
 
 - [Portable build](https://github.com/NotMe3555/SpotifyWallpaper/releases/latest/download/SpotifyWallpaper-portable.zip)
 - [Windows installer](https://github.com/NotMe3555/SpotifyWallpaper/releases/latest/download/SpotifyWallpaper-setup.exe)
 - [All releases](https://github.com/NotMe3555/SpotifyWallpaper/releases)
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/wallpaper-canyon.png" alt="Spotify Wallpaper with a canyon background and circular visualizer" width="32%">
+  <img src="assets/screenshots/wallpaper-anime.png" alt="Spotify Wallpaper with animated artwork and a circular visualizer" width="32%">
+  <img src="assets/screenshots/wallpaper-album-art.png" alt="Spotify Wallpaper with album art and an audio visualizer" width="32%">
+</p>
+<p align="center">
+  <img src="assets/screenshots/wallpaper-minimal.png" alt="Minimal Spotify Wallpaper layout with album art and visualizer" width="32%">
+  <img src="assets/screenshots/wallpaper-self-care.png" alt="Spotify Wallpaper with a dark music video background" width="32%">
+  <img src="assets/screenshots/app-settings.png" alt="Spotify Wallpaper display settings window, centered with transparent margins" width="32%">
+</p>
 
 The portable build needs no installation. Extract it to a writable folder and run `SpotifyWallpaper.exe`. The installer sets up a per-user copy and adds Start menu shortcuts.
 
@@ -16,7 +29,7 @@ The portable build needs no installation. Extract it to a writable folder and ru
 - Microsoft Edge WebView2 Runtime for the live wallpaper (included with Windows 11; install it from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/) on Windows 10 if needed)
 - A Spotify account and a Spotify developer app
 - Spotify Premium for playback controls
-- Optional: YouTube Data API key for music videos; Discord bot application for the Discord tab
+- Optional: YouTube Data API key for music videos
 
 ## First run
 
@@ -29,7 +42,7 @@ Your credentials, Spotify login, preferences, and API caches are stored next to 
 
 ## Build from source
 
-Run `build.bat` from a Visual Studio 2022 Developer Command Prompt or a system with Visual Studio 2022 Build Tools and the Desktop development with C++ workload installed. The script downloads the WebView2 SDK and D++ libraries on first build.
+Run `build.bat` from a Visual Studio 2022 Developer Command Prompt or a system with Visual Studio 2022 Build Tools and the Desktop development with C++ workload installed. The script downloads the WebView2 SDK on first build.
 
 ```bat
 build.bat
@@ -49,12 +62,11 @@ The installer source is `installer.iss`; compile it with the Inno Setup compiler
 - Live wallpaper on one or multiple displays, or use with Lively Wallpaper or Wallpaper Engine
 - Custom layout, backgrounds, colors, album art shapes, visualizer, and synced lyrics
 - Optional official YouTube music videos, cached locally
-- Optional Discord bot presence and voice streaming
 
-Playback controls require Spotify Premium. YouTube videos depend on embed availability and API quota. Streaming Spotify audio to other people may violate Spotify's terms; Spotify's Listen Along feature is its supported option for listening with friends.
+Playback controls require Spotify Premium. YouTube videos depend on embed availability and API quota.
 
 ## Open source and third-party software
 
 This project is licensed under the MIT License. Bundled third-party components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Spotify, Discord, YouTube, Microsoft, and their respective marks belong to their owners. Spotify Wallpaper is an independent project and is not affiliated with Spotify AB.
+Spotify, YouTube, Microsoft, and their respective marks belong to their owners. Spotify Wallpaper is an independent project and is not affiliated with Spotify AB.

@@ -22,10 +22,6 @@ const Default kDefaults[] = {
     {"interactive", "on", false},
     {"pauseCovered", "on", false},
 
-    {"discordBot", "on", false},
-    {"audioOutput", "speakers", false},
-    {"discordPresence", "on", false},
-
     {"position", "center", true},
     {"scale", "100", true},
     {"accent", "album", true},

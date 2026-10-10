@@ -30,10 +30,6 @@ bool saveCredentials(const std::string& id, const std::string& secret);
 std::string youtubeKey();
 bool saveYoutubeKey(const std::string& key);
 
-
-std::string discordToken();
-bool saveDiscordToken(const std::string& token);
-
 bool isConnected();
 
 std::string accessToken(int64_t* expiresAt = nullptr);

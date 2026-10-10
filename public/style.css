@@ -369,6 +369,49 @@ body:not(.is-empty) .art__placeholder { opacity: 0; }
   transition: opacity 1.2s var(--ease);
 }
 
+.lyrics { display: none; pointer-events: none; }
+body[data-lyrics="player"] .lyrics--player,
+body[data-lyrics="screen"] .lyrics--screen { display: block; }
+.lyrics--player {
+  margin-top: 14px;
+  max-height: 5.2em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+}
+.lyrics__line {
+  min-height: 1.65em;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.lyrics__line--previous,
+.lyrics__line--next { color: var(--text-3); opacity: 0.62; }
+.lyrics__line--active { color: var(--text); font-weight: 600; }
+.lyrics--player .lyrics__line { font-size: 15px; white-space: nowrap; }
+.lyrics--screen {
+  position: fixed;
+  z-index: 3;
+  left: 50%;
+  bottom: 15vh;
+  width: min(84vw, 1100px);
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.9);
+  mask-image: linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+}
+.lyrics--screen .lyrics__line { justify-content: center; min-height: 1.5em; }
+.lyrics--screen .lyrics__line--previous,
+.lyrics--screen .lyrics__line--next { font-size: clamp(18px, 2.2vw, 30px); }
+.lyrics--screen .lyrics__line--active { font-size: clamp(24px, 3vw, 42px); }
+body[data-lyrics-size="small"] .lyrics--player .lyrics__line { font-size: 12px; }
+body[data-lyrics-size="large"] .lyrics--player .lyrics__line { font-size: 18px; }
+body[data-lyrics-size="small"] .lyrics--screen .lyrics__line { font-size: clamp(16px, 1.8vw, 24px); }
+body[data-lyrics-size="large"] .lyrics--screen .lyrics__line--previous,
+body[data-lyrics-size="large"] .lyrics--screen .lyrics__line--next { font-size: clamp(22px, 2.8vw, 38px); }
+body[data-lyrics-size="large"] .lyrics--screen .lyrics__line--active { font-size: clamp(30px, 3.8vw, 54px); }
+
 
 .is-idle .controls,
 .is-idle .device { opacity: 0.28; }
@@ -433,6 +476,7 @@ body:not(.is-empty) .art__placeholder { opacity: 0; }
   .player { flex-direction: column; gap: 36px; padding-top: 18vh; text-align: left; }
   .art { width: min(60vw, 340px); }
   .meta { width: min(86vw, 420px); }
+  .lyrics--screen { bottom: 12vh; width: 90vw; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,6 +15,9 @@
     muteBtn: $('muteBtn'), volume: $('volume'), volWave1: $('volWave1'), volWave2: $('volWave2'),
     device: $('device'), toast: $('toast'),
     bgVideo: $('bgVideo'), artVideo: $('artVideo'), vizBars: $('vizBars'), vizRing: $('vizRing'),
+    lyricsPlayerPrevious: $('lyricsPlayerPrevious'), lyricsPlayerActive: $('lyricsPlayerActive'),
+    lyricsPlayerNext: $('lyricsPlayerNext'), lyricsScreenPrevious: $('lyricsScreenPrevious'),
+    lyricsScreenActive: $('lyricsScreenActive'), lyricsScreenNext: $('lyricsScreenNext'),
   };
 
   const state = {
@@ -31,6 +34,8 @@
     artFront: el.artA,
     bgFront: el.bgA,
   };
+
+  const lyricState = { key: '', pending: '', lines: [], plain: false, shownIndex: -2, message: '' };
 
 
   const ACCENTS = {
@@ -52,6 +57,8 @@
     body.dataset.blur = next.blur || 'normal';
     body.dataset.videoMode = next.videoMode === 'cover' ? 'cover' : 'background';
     body.dataset.viz = next.visualizer || 'off';
+    body.dataset.lyrics = next.lyrics || 'off';
+    body.dataset.lyricsSize = next.lyricsSize || 'normal';
     const root = document.documentElement.style;
     root.setProperty('--bg', next.background === 'black' ? '#000000' : next.bgColor || '#07080b');
     root.setProperty('--bg-color2', next.bgColor2 || '#1d1033');
@@ -64,6 +71,7 @@
     if (next.idleFade === 'off') body.classList.remove('is-idle');
     updateClock();
     updateVideo(state.item);
+    requestLyrics(state.item);
     startViz();
   }
   window.applySettings = applySettings;
@@ -600,6 +608,111 @@
     requestAnimationFrame(vizFrame);
   }
 
+  function clearLyrics() {
+    lyricState.key = '';
+    lyricState.pending = '';
+    lyricState.lines = [];
+    lyricState.plain = false;
+    lyricState.shownIndex = -2;
+    lyricState.message = '';
+    renderLyrics(true);
+  }
+
+  function parseLyrics(data) {
+    const synced = [];
+    const stamp = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+    for (const raw of (data.synced || '').split(/\r?\n/)) {
+      const text = raw.replace(stamp, '').trim();
+      if (!text) continue;
+      stamp.lastIndex = 0;
+      let match;
+      while ((match = stamp.exec(raw))) {
+        const fraction = (match[3] || '0').padEnd(3, '0').slice(0, 3);
+        synced.push({ time: (+match[1] * 60 + +match[2]) * 1000 + +fraction, text });
+      }
+    }
+    if (synced.length) return { lines: synced.sort((a, b) => a.time - b.time), plain: false };
+    const plain = (data.plain || '').split(/\r?\n/).map((text) => text.trim()).filter(Boolean);
+    return { lines: plain.map((text) => ({ time: 0, text })), plain: plain.length > 0 };
+  }
+
+  async function requestLyrics(item) {
+    if (!['player', 'screen'].includes(settings.lyrics) || !item || item.type !== 'track') {
+      if (!['player', 'screen'].includes(settings.lyrics) || !item) clearLyrics();
+      return;
+    }
+    const key = item.id;
+    if (lyricState.key === key || lyricState.pending === key) return;
+    lyricState.pending = key;
+    lyricState.message = 'Finding lyrics…';
+    renderLyrics(true);
+    const query = new URLSearchParams({
+      artist: (item.artists || []).map((artist) => artist.name).join(', '),
+      title: item.name || '',
+      album: item.album?.name || '',
+      duration: String(Math.round((item.duration_ms || 0) / 1000)),
+    });
+    try {
+      const response = await fetch('/lyrics?' + query, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Lyrics request failed');
+      const data = await response.json();
+      if (state.itemId !== key || settings.lyrics === 'off') return;
+      const parsed = parseLyrics(data);
+      lyricState.key = key;
+      lyricState.lines = parsed.lines;
+      lyricState.plain = parsed.plain;
+      lyricState.message = data.instrumental ? 'Instrumental' : parsed.lines.length ? '' : 'Lyrics aren’t available for this song';
+      lyricState.shownIndex = -2;
+      renderLyrics(true);
+    } catch {
+      if (state.itemId === key) {
+        lyricState.key = key;
+        lyricState.lines = [];
+        lyricState.message = 'Couldn’t load lyrics';
+        renderLyrics(true);
+      }
+    } finally {
+      if (lyricState.pending === key) lyricState.pending = '';
+    }
+  }
+
+  function renderLyrics(force = false) {
+    const nodes = [
+      [el.lyricsPlayerPrevious, el.lyricsScreenPrevious],
+      [el.lyricsPlayerActive, el.lyricsScreenActive],
+      [el.lyricsPlayerNext, el.lyricsScreenNext],
+    ];
+    let index = -1;
+    if (lyricState.lines.length) {
+      if (lyricState.plain) {
+        index = Math.min(lyricState.lines.length - 1,
+          Math.floor((position() / Math.max(1, state.duration)) * lyricState.lines.length));
+      } else {
+        const now = position();
+        let low = 0, high = lyricState.lines.length - 1;
+        while (low <= high) {
+          const mid = (low + high) >> 1;
+          if (lyricState.lines[mid].time <= now) low = mid + 1;
+          else high = mid - 1;
+        }
+        index = high;
+      }
+    }
+    const signature = lyricState.lines.length ? `${lyricState.key}:${index}` : `${lyricState.pending}:${lyricState.message}`;
+    if (!force && signature === lyricState.shownIndex) return;
+    lyricState.shownIndex = signature;
+    if (!lyricState.lines.length) {
+      nodes[0].forEach((node) => { node.textContent = ''; });
+      nodes[1].forEach((node) => { node.textContent = lyricState.message; });
+      nodes[2].forEach((node) => { node.textContent = ''; });
+      return;
+    }
+    const current = Math.max(0, index);
+    const texts = [lyricState.lines[current - 1]?.text || '', lyricState.lines[current]?.text || '',
+      lyricState.lines[current + 1]?.text || ''];
+    nodes.forEach((pair, i) => pair.forEach((node) => { node.textContent = texts[i]; }));
+  }
+
 
   function renderPlaying(isPlaying) {
     body.classList.toggle('is-playing', isPlaying);
@@ -628,6 +741,7 @@
     setArt(null);
     renderPlaying(false);
     state.item = null;
+    clearLyrics();
     updateVideo(null);
   }
 
@@ -647,6 +761,8 @@
       setArt(images && images[0] ? images[0].url : null);
       state.item = item;
       updateVideo(item);
+      clearLyrics();
+      requestLyrics(item);
     }
 
     state.duration = item.duration_ms;
@@ -682,6 +798,7 @@
       el.elapsed.textContent = '0:00';
       el.duration.textContent = '0:00';
     }
+    renderLyrics();
     requestAnimationFrame(tick);
   }
 
