@@ -5,6 +5,7 @@
 #include <wrl.h>
 
 #include <WebView2.h>
+#include <WebView2EnvironmentOptions.h>
 
 #include <memory>
 
@@ -331,8 +332,12 @@ void createWebViews() {
   }
   if (g_envPending) return;
   g_envPending = true;
+  // Hardware-decoded video stops after about a dozen frames in a window parented to the desktop, for local
+  // files and YouTube alike, so video is decoded in software.
+  auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
+  options->put_AdditionalBrowserArguments(L"--disable-accelerated-video-decode");
   HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
-      nullptr, (g_dataDir + L"\\WebView2").c_str(), nullptr,
+      nullptr, (g_dataDir + L"\\WebView2").c_str(), options.Get(),
       Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
           [](HRESULT hr, ICoreWebView2Environment* env) -> HRESULT {
             g_envPending = false;

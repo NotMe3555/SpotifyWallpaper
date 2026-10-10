@@ -28,13 +28,13 @@ The portable build needs no installation. Extract it to a writable folder and ru
 - Windows 10 or 11, 64-bit
 - Microsoft Edge WebView2 Runtime for the live wallpaper (included with Windows 11; install it from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/) on Windows 10 if needed)
 - The Spotify desktop app, running on the same PC
-- Optional: YouTube Data API key for music videos
+- Optional: YouTube Data API key as a backup for music video search
 
 ## First run
 
 1. Open Spotify on this PC and play something.
 2. Open Spotify Wallpaper. The header shows **Spotify open** once it has found the Spotify app, and the wallpaper starts following it.
-3. Optional: paste a YouTube Data API key on the General tab to turn on music videos.
+3. Optional: turn on **Music videos** on the Background tab. No key is needed.
 
 There is nothing to sign in to. Spotify Wallpaper reads the current track, position, and album art that the Spotify app reports to Windows, and sends play, pause, skip, and seek back the same way. It does not use the Spotify Web API, so there are no Spotify rate limits and no Client ID or Client Secret.
 
@@ -67,10 +67,10 @@ The installer source is `installer.iss`; compile it with the Inno Setup compiler
 - Album art, track details, progress, clock, playback controls, and volume
 - Live wallpaper on one or multiple displays, or use with Lively Wallpaper or Wallpaper Engine
 - Custom layout, backgrounds, colors, album art shapes, visualizer, and synced lyrics
-- Your own image, GIF, or MP4 as the background
+- Your own images, GIFs, and videos as the background, as a single file or a playlist that cross-fades from one to the next. Each image stays for a duration you choose; each video plays through once
 - Optional official YouTube music videos, cached locally
 
-YouTube videos depend on embed availability and API quota: a key gets 100 video searches a day, and each song is only searched once.
+Music videos are found with YouTube's own site search, which needs no key and has no daily limit, and each song is only looked up once. That search is unofficial and may stop working if YouTube changes it. If you add a YouTube Data API key on the General tab, the app uses it to skip videos that can't be embedded and falls back to the official search (100 a day) when the built-in one is unavailable.
 
 ## Trademarks
 

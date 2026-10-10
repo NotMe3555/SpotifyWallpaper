@@ -60,9 +60,10 @@ enum : UINT {
 
 enum Hit { kNone, kPrev, kPlay, kNext, kEye, kCopyRedirect, kDashboard, kConnect, kCopyUrl, kOpenUrl, kReset,
            kEyeYoutube, kYoutubeLink };
-constexpr int kTabHit = 100, kRowHit = 200, kHitMax = 400;
-enum Tab { kTabAccount, kTabDisplay, kTabCustomize, kTabCount };
-const wchar_t* const kTabNames[kTabCount] = {L"General", L"Display", L"Customize"};
+constexpr int kTabHit = 100, kRowHit = 200, kSlotPickHit = 300, kSlotRemoveHit = 340, kSlotAddHit = 380, kHitMax = 400;
+constexpr int kMaxSlots = 40;
+enum Tab { kTabAccount, kTabDisplay, kTabBackground, kTabSpotify, kTabCount };
+const wchar_t* const kTabNames[kTabCount] = {L"General", L"Display", L"Background", L"Spotify options"};
 enum { kEditId = 101, kEditSecret = 102, kEditYoutube = 103, kTimerAnim = 1, kTrayId = 1 };
 enum { kMenuOpen = 1, kMenuWallpaper, kMenuToggleWallpaper, kMenuQuit };
 
@@ -71,6 +72,8 @@ constexpr wchar_t kGlyphPlay[] = L"", kGlyphPause[] = L"", kGlyphPrev[] = 
                   kGlyphNext[] = L"", kGlyphCopy[] = L"", kGlyphOpen[] = L"",
                   kGlyphShow[] = L"", kGlyphHide[] = L"", kGlyphCheck[] = L"",
                   kGlyphMusic[] = L"", kGlyphLink[] = L"", kGlyphChevron[] = L"",
+                  kGlyphAdd[] = L"\uE710", kGlyphRemove[] = L"\uE738", kGlyphPicture[] = L"\uE8B9",
+                  kGlyphVideo[] = L"\uE714", kGlyphFile[] = L"\uE7C3",
                   kGlyphReset[] = L"";
 
 
@@ -96,58 +99,61 @@ const std::vector<Row> kRows = {
     {kTabAccount, "startup", L"Launch at Windows startup", L"Runs quietly in the tray so the wallpaper is always live.",
      {}},
 
-    {kTabCustomize, "position", L"Layout", L"Where the player sits on screen.",
+    {kTabSpotify, "position", L"Layout", L"Where the player sits on screen.",
      {{"center", L"Centered"}, {"left", L"Left"}, {"right", L"Right"}, {"bottomLeft", L"Bottom left"},
       {"bottomRight", L"Bottom right"}}},
-    {kTabCustomize, "scale", L"Size", L"How big the player is drawn.",
+    {kTabSpotify, "scale", L"Size", L"How big the player is drawn.",
      {{"75", L"Small"}, {"90", L"Compact"}, {"100", L"Normal"}, {"115", L"Large"}, {"130", L"Extra large"},
       {"150", L"Huge"}}},
-    {kTabCustomize, "accent", L"Accent color", L"Used for the equalizer, progress bar and glow.",
+    {kTabSpotify, "accent", L"Accent color", L"Used for the equalizer, progress bar and glow.",
      {{"album", L"From album art"}, {"white", L"White"}, {"blue", L"Blue"}, {"green", L"Green"}, {"pink", L"Pink"},
       {"orange", L"Orange"}, {"purple", L"Purple"}, {"red", L"Red"}}},
-    {kTabCustomize, "artShape", L"Cover shape", L"",
+    {kTabSpotify, "artShape", L"Cover shape", L"",
      {{"rounded", L"Rounded"}, {"square", L"Square"}, {"circle", L"Circle"}, {"vinyl", L"Spinning vinyl"}}},
-    {kTabCustomize, "motion", L"Ambient motion", L"Drifting background and equalizer animation.", {}},
+    {kTabSpotify, "motion", L"Ambient motion", L"Drifting background and equalizer animation.", {}},
 
-    {kTabCustomize, "background", L"Background", L"What fills the screen behind the player.",
+    {kTabBackground, "background", L"Background", L"What fills the screen behind the player.",
      {{"art", L"Blurred album art"}, {"glow", L"Soft color glow"}, {"solid", L"Solid color"},
-      {"gradient", L"Gradient"}, {"black", L"Pure black"}, {"custom", L"Your image or video"}}},
-    {kTabCustomize, "bgFile", L"Background file", L"An image, GIF or MP4 of your own.", {}},
-    {kTabCustomize, "bgColor", L"Background color", L"Solid color, gradient start, and base under the art.", {}},
-    {kTabCustomize, "bgColor2", L"Gradient end color", L"Used by the Gradient background.", {}},
-    {kTabCustomize, "brightness", L"Art brightness", L"", {{"dim", L"Dim"}, {"normal", L"Normal"}, {"bright", L"Bright"}}},
-    {kTabCustomize, "blur", L"Art blur", L"", {{"light", L"Light"}, {"normal", L"Normal"}, {"heavy", L"Heavy"}}},
-    {kTabCustomize, "vignette", L"Vignette", L"Darkens the edges of the screen.", {}},
-    {kTabCustomize, "grain", L"Film grain", L"A subtle texture over the background.", {}},
+      {"gradient", L"Gradient"}, {"black", L"Pure black"}, {"custom", L"Playlist"}}},
+    {kTabBackground, "bgFiles", L"Background playlist", L"Images, GIFs and videos of your own, shown in order.", {}},
+    {kTabBackground, "bgImageSeconds", L"Image duration", L"How long each image stays before the next one.",
+     {{"5", L"5 seconds"}, {"10", L"10 seconds"}, {"15", L"15 seconds"}, {"30", L"30 seconds"}, {"60", L"1 minute"},
+      {"300", L"5 minutes"}, {"900", L"15 minutes"}}},
+    {kTabBackground, "bgColor", L"Background color", L"Solid color, gradient start, and base under the art.", {}},
+    {kTabBackground, "bgColor2", L"Gradient end color", L"Used by the Gradient background.", {}},
+    {kTabBackground, "brightness", L"Background brightness", L"", {{"dim", L"Dim"}, {"normal", L"Normal"}, {"bright", L"Bright"}}},
+    {kTabBackground, "blur", L"Art blur", L"", {{"light", L"Light"}, {"normal", L"Normal"}, {"heavy", L"Heavy"}}},
+    {kTabBackground, "vignette", L"Vignette", L"Darkens the edges of the screen.", {}},
+    {kTabBackground, "grain", L"Film grain", L"A subtle texture over the background.", {}},
 
-    {kTabCustomize, "video", L"Music videos", L"Plays the official video, muted and synced, when one exists.", {}},
-    {kTabCustomize, "videoMode", L"Show the video", L"",
+    {kTabBackground, "video", L"Music videos", L"Plays the official video, muted and synced, when one exists.", {}},
+    {kTabBackground, "videoMode", L"Show the video", L"",
      {{"background", L"As the background"}, {"cover", L"In place of the cover"}}},
-    {kTabCustomize, "videoBrightness", L"Video brightness", L"Dims the music video so the player stays readable.",
+    {kTabBackground, "videoBrightness", L"Video brightness", L"Dims the music video so the player stays readable.",
      {{"30", L"30%"}, {"45", L"45%"}, {"60", L"60%"}, {"75", L"75%"}, {"90", L"90%"}, {"100", L"100%"}}},
-    {kTabCustomize, "visualizer", L"Visualizer", L"Reacts to the music playing on your PC.",
+    {kTabSpotify, "visualizer", L"Visualizer", L"Reacts to the music playing on your PC.",
      {{"off", L"Off"}, {"ring", L"Ring around the cover"}, {"bars", L"Bars along the bottom"},
       {"both", L"Ring and bars"}}},
-    {kTabCustomize, "vizIntensity", L"Visualizer intensity", L"",
+    {kTabSpotify, "vizIntensity", L"Visualizer intensity", L"",
      {{"low", L"Subtle"}, {"normal", L"Normal"}, {"high", L"Punchy"}}},
-    {kTabCustomize, "vizColor", L"Visualizer color", L"",
+    {kTabSpotify, "vizColor", L"Visualizer color", L"",
      {{"accent", L"Accent color"}, {"white", L"White"}, {"rainbow", L"Rainbow"}}},
 
-    {kTabCustomize, "lyrics", L"Lyrics", L"Synced to the song, from LRCLIB. Not every song has them.",
+    {kTabSpotify, "lyrics", L"Lyrics", L"Synced to the song, from LRCLIB. Not every song has them.",
      {{"off", L"Off"}, {"player", L"Under the song info"}, {"screen", L"Large, across the screen"}}},
-    {kTabCustomize, "lyricsSize", L"Lyrics size", L"",
+    {kTabSpotify, "lyricsSize", L"Lyrics size", L"",
      {{"small", L"Small"}, {"normal", L"Normal"}, {"large", L"Large"}}},
 
-    {kTabCustomize, "clock", L"Clock", L"", {}},
-    {kTabCustomize, "clock24", L"24-hour clock", L"", {}},
-    {kTabCustomize, "date", L"Date", L"", {}},
-    {kTabCustomize, "art", L"Album art", L"", {}},
-    {kTabCustomize, "album", L"Album name", L"", {}},
-    {kTabCustomize, "progress", L"Progress bar", L"", {}},
-    {kTabCustomize, "controls", L"Playback buttons", L"", {}},
-    {kTabCustomize, "volume", L"Volume slider", L"", {}},
-    {kTabCustomize, "device", L"“Listening on” device", L"", {}},
-    {kTabCustomize, "idleFade", L"Fade controls when the mouse is idle", L"", {}},
+    {kTabSpotify, "clock", L"Clock", L"", {}},
+    {kTabSpotify, "clock24", L"24-hour clock", L"", {}},
+    {kTabSpotify, "date", L"Date", L"", {}},
+    {kTabSpotify, "art", L"Album art", L"", {}},
+    {kTabSpotify, "album", L"Album name", L"", {}},
+    {kTabSpotify, "progress", L"Progress bar", L"", {}},
+    {kTabSpotify, "controls", L"Playback buttons", L"", {}},
+    {kTabSpotify, "volume", L"Volume slider", L"", {}},
+    {kTabSpotify, "device", L"“Listening on” device", L"", {}},
+    {kTabSpotify, "idleFade", L"Fade controls when the mouse is idle", L"", {}},
 
 };
 
@@ -158,12 +164,14 @@ struct Section {
   bool compact;
 };
 const Section kSections[] = {
-    {"position", L"LOOK", false},
+    {"position", L"LAYOUT", false},
     {"background", L"BACKDROP", false},
-    {"video", L"VIDEO & VISUALIZER", false},
+    {"video", L"MUSIC VIDEOS", false},
+    {"visualizer", L"VISUALIZER", false},
     {"lyrics", L"LYRICS", false},
     {"clock", L"ON-SCREEN ELEMENTS", true},
 };
+constexpr int kSectionCount = (int)std::size(kSections);
 
 
 
@@ -220,6 +228,7 @@ struct App {
   float hotOffsetY = 0;
   D2D1_RECT_F hotClip = {-1e9f, -1e9f, 1e9f, 1e9f};
   float scrollY = 0, scrollTarget = 0, scrollMax = 0;
+  std::vector<std::string> slots;
   int hover = kNone, pressed = kNone, focusedEdit = 0;
   bool trackingMouse = false;
   float anim[kHitMax] = {};
@@ -314,7 +323,41 @@ void enableDarkMenus() {
 
 
 bool isColorRow(const Row& r) { return std::string(r.key) == "bgColor" || std::string(r.key) == "bgColor2"; }
-bool isFileRow(const Row& r) { return std::string(r.key) == "bgFile"; }
+bool isFileRow(const Row& r) { return std::string(r.key) == "bgFiles"; }
+
+std::wstring baseName(const std::string& path) {
+  std::wstring w = widen(path);
+  return w.substr(w.find_last_of(L"\\/") + 1);
+}
+
+// The playlist as the window shows it. A slot can sit empty until a file is picked for it; only filled
+// slots are saved, so the window keeps its own copy.
+std::vector<std::string> filledSlots() {
+  std::vector<std::string> out;
+  for (auto& s : g.slots)
+    if (!s.empty()) out.push_back(s);
+  return out;
+}
+
+void syncSlots() {
+  auto saved = settings::list("bgFiles");
+  if (filledSlots() != saved) g.slots = saved;
+}
+
+// Rows that only matter for another choice are left out, so the list shows what can be changed right now.
+bool rowVisible(const Row& r) {
+  std::string key = r.key, bg = settings::get("background");
+  if (key == "bgFiles" || key == "bgImageSeconds") return bg == "custom";
+  if (key == "bgColor") return bg != "black" && bg != "custom";
+  if (key == "bgColor2") return bg == "gradient";
+  if (key == "brightness") return bg == "art" || bg == "custom";
+  if (key == "blur") return bg == "art";
+  if (key == "videoMode" || key == "videoBrightness") return settings::on("video");
+  if (key == "vizIntensity" || key == "vizColor") return settings::get("visualizer") != "off";
+  if (key == "lyricsSize") return settings::get("lyrics") != "off";
+  if (key == "clock24") return settings::on("clock");
+  return true;
+}
 bool isSwitchRow(const Row& r) {
   return r.choices.empty() && !isColorRow(r) && !isFileRow(r) && std::string(r.key) != "monitor";
 }
@@ -372,10 +415,6 @@ std::wstring choiceLabel(const Row& r) {
     std::wstring w = widen(v);
     CharUpperBuffW(w.data(), (DWORD)w.size());
     return w;
-  }
-  if (isFileRow(r)) {
-    std::wstring path = widen(v);
-    return path.empty() ? L"Choose a file…" : path.substr(path.find_last_of(L"\\/") + 1);
   }
   std::vector<std::wstring> labels;
   std::vector<Choice> choices = std::string(r.key) == "monitor" ? monitorChoices(labels) : r.choices;
@@ -818,7 +857,7 @@ void drawRow(size_t index, float y, float height, D2D1_COLOR_F accent) {
 
 void drawAccountTab(D2D1_COLOR_F accent) {
   const float R0 = g.R0, R1 = g.R1;
-  sectionLabel(L"YOUTUBE (OPTIONAL)", kYoutubeFieldY - 24);
+  sectionLabel(L"YOUTUBE KEY (OPTIONAL)", kYoutubeFieldY - 24);
   {
     std::wstring link = L"Get a free API key";
     float lw = measure(link, g.fSmall.Get());
@@ -831,7 +870,7 @@ void drawAccountTab(D2D1_COLOR_F accent) {
   }
   field({R0, kYoutubeFieldY, R1, kYoutubeFieldY + kFieldH}, g.focusedEdit == kEditYoutube, accent);
   iconButton(kEyeYoutube, rect(R1 - 38, kYoutubeFieldY + 4, 32, 32), g.youtubeVisible ? kGlyphHide : kGlyphShow);
-  text(L"Lets the wallpaper find official music videos (Customize tab).",
+  text(L"Music videos work without a key. A key is only a backup for the built-in search.",
        {R0, kYoutubeFieldY + kFieldH + 6, R1, kYoutubeFieldY + kFieldH + 24}, g.fSmall.Get(), kText3);
 
   for (size_t i = 0; i < kRows.size(); ++i)
@@ -854,38 +893,105 @@ void drawWebAddress(float y) {
   iconButton(kOpenUrl, rect(R1 - 38, fy + 4, 32, 32), kGlyphOpen);
 }
 
+// One row per playlist slot, stacked in play order: number, type icon, file name, a button to pick the
+// file, and a minus to drop the slot. The plus above adds an empty slot.
+float drawPlaylist(float y, D2D1_COLOR_F accent) {
+  const float R0 = g.R0, R1 = g.R1, rowH = 46;
+  syncSlots();
+  int n = (int)g.slots.size();
+  bool full = n >= kMaxSlots;
+
+  text(L"Playlist", {R0, y, R1 - 50, y + 22}, g.fBody.Get(), kText2);
+  text(L"Images, GIFs and videos, played in order from the top.", {R0, y + 20, R1 - 50, y + 40}, g.fSmall.Get(), kText3);
+  D2D1_RECT_F add = {R1 - 34, y + 3, R1, y + 37};
+  float ah = full ? 0 : ease(g.anim[kSlotAddHit]);
+  if (!full) addHot(add, kSlotAddHit);
+  fillRound(add, 17, mix(hex(0xFFFFFF, full ? .03f : .06f), alpha(accent, .30f), ah));
+  strokeRound(add, 17, mix(kLine, alpha(accent, .6f), ah));
+  text(kGlyphAdd, add, g.fIcon.Get(), full ? kText3 : mix(kText2, kText, ah), DWRITE_TEXT_ALIGNMENT_CENTER);
+  y += 48;
+
+  D2D1_RECT_F box = {R0, y, R1, y + (n ? n * rowH : 58.f)};
+  fillRound(box, 12, hex(0xFFFFFF, .025f));
+  strokeRound(box, 12, kLine);
+  if (!n)
+    text(L"Nothing here yet. Press + to add a slot, then select a file for it.", box, g.fSmall.Get(), kText3,
+         DWRITE_TEXT_ALIGNMENT_CENTER);
+  for (int i = 0; i < n; ++i) {
+    const std::string& path = g.slots[i];
+    float top = y + i * rowH, mid = top + rowH / 2;
+    if (i) {
+      g.brush->SetColor(kLine);
+      g.rt->FillRectangle({R0 + 14, top, R1 - 14, top + 1}, g.brush.Get());
+    }
+    bool empty = path.empty();
+    std::wstring name = baseName(path), ext = name.substr(std::min(name.find_last_of(L'.'), name.size()));
+    bool video = !_wcsicmp(ext.c_str(), L".mp4") || !_wcsicmp(ext.c_str(), L".webm");
+
+    text(std::to_wstring(i + 1), {R0 + 14, top, R0 + 36, top + rowH}, g.fSmall.Get(), kText3);
+    text(empty ? kGlyphFile : video ? kGlyphVideo : kGlyphPicture, {R0 + 36, top, R0 + 60, top + rowH}, g.fIcon.Get(),
+         empty ? kText3 : alpha(accent, .9f), DWRITE_TEXT_ALIGNMENT_CENTER);
+
+    D2D1_RECT_F remove = {R1 - 40, mid - 14, R1 - 12, mid + 14};
+    float rh = ease(g.anim[kSlotRemoveHit + i]);
+    addHot(remove, kSlotRemoveHit + i);
+    fillRound(remove, 14, mix(hex(0xFFFFFF, .05f), alpha(kRed, .22f), rh));
+    strokeRound(remove, 14, mix(kLine, alpha(kRed, .55f), rh));
+    text(kGlyphRemove, remove, g.fIconSm.Get(), mix(kText2, kRed, rh), DWRITE_TEXT_ALIGNMENT_CENTER);
+
+    std::wstring label = empty ? L"Select file" : L"Change";
+    float bw = measure(label, g.fSmall.Get()) + 28;
+    D2D1_RECT_F pick = {remove.left - 10 - bw, mid - 14, remove.left - 10, mid + 14};
+    float ph = ease(g.anim[kSlotPickHit + i]);
+    addHot(pick, kSlotPickHit + i);
+    if (empty) {
+      fillRound(pick, 9, mix(hex(0xE9ECF2), hex(0xFFFFFF), ph));
+      text(label, pick, g.fSmall.Get(), hex(0x0B0C0F), DWRITE_TEXT_ALIGNMENT_CENTER);
+    } else {
+      fillRound(pick, 9, mix(hex(0xFFFFFF, .05f), hex(0xFFFFFF, .10f), ph));
+      strokeRound(pick, 9, kLine);
+      text(label, pick, g.fSmall.Get(), mix(kText2, kText, ph), DWRITE_TEXT_ALIGNMENT_CENTER);
+    }
+    text(empty ? L"No file selected" : name, {R0 + 68, top, pick.left - 14, top + rowH}, g.fBody.Get(),
+         empty ? kText3 : kText);
+  }
+  return box.bottom + 16;
+}
+
 void drawCustomizeTab(D2D1_COLOR_F accent) {
   const float R0 = g.R0, R1 = g.R1;
-  D2D1_RECT_F view = {R0 - 12, kContentY - 10, R1 + 20, g.H - 44};
+  const float listY = kContentY;
+
+  D2D1_RECT_F view = {R0 - 12, listY - 10, R1 + 20, g.H - 44};
   g.rt->PushAxisAlignedClip(view, D2D1_ANTIALIAS_MODE_ALIASED);
   g.rt->SetTransform(D2D1::Matrix3x2F::Translation(0, -g.scrollY));
   g.hotOffsetY = -g.scrollY;
   g.hotClip = view;
 
-  float y = kContentY;
+  float y = listY;
   bool compact = false;
   for (size_t i = 0; i < kRows.size(); ++i) {
-    if (kRows[i].tab != kTabCustomize) continue;
-    for (const Section& s : kSections) {
-      if (std::string(s.firstKey) != kRows[i].key) continue;
-      if (y > kContentY) y += 14;
-      sectionLabel(s.label, y);
+    if (kRows[i].tab != g.tab || !rowVisible(kRows[i])) continue;
+    for (int s = 0; s < kSectionCount; ++s) {
+      if (std::string(kSections[s].firstKey) != kRows[i].key) continue;
+      if (y > listY) y += 14;
+      sectionLabel(kSections[s].label, y);
       y += 26;
-      compact = s.compact;
+      compact = kSections[s].compact;
     }
-    if (!strcmp(kRows[i].key, "visualizer") && settings::on("video") && auth::youtubeKey().empty()) {
-      text(L"Music videos need a YouTube API key — add one in the General tab.", {R0, y - 6, R1, y + 14},
-           g.fSmall.Get(), kAmber);
-      y += 22;
-    } else if (!strcmp(kRows[i].key, "visualizer") && settings::on("video") && youtube::quotaExceeded()) {
-      text(L"YouTube's 100 searches a day are used up — new songs get videos again after midnight Pacific.",
+    if (!strcmp(kRows[i].key, "video") && settings::on("video") && youtube::quotaExceeded()) {
+      text(L"Video search is unavailable and the backup key's 100 searches a day are used up.",
            {R0, y - 6, R1, y + 14}, g.fSmall.Get(), kAmber);
       y += 22;
+    }
+    if (isFileRow(kRows[i])) {
+      y = drawPlaylist(y, accent);
+      continue;
     }
     drawRow(i, y, compact ? 30.f : 40.f, accent);
     y += compact ? 40.f : 52.f;
   }
-  if (settings::get("visualizer") != "off") {
+  if (g.tab == kTabSpotify && settings::get("visualizer") != "off") {
     text(L"The visualizer listens to everything your PC is playing.", {R0, y, R1, y + 20}, g.fSmall.Get(), kText3);
     y += 26;
   }
@@ -905,7 +1011,7 @@ void drawCustomizeTab(D2D1_COLOR_F accent) {
 
 
   float viewH = view.bottom - view.top;
-  g.scrollMax = std::max(0.f, y - kContentY + 10 - viewH);
+  g.scrollMax = std::max(0.f, y - listY + 10 - viewH);
   if (g.scrollTarget > g.scrollMax) g.scrollTarget = g.scrollMax;
   if (g.scrollY > g.scrollMax) g.scrollY = g.scrollMax;
   auto edgeFade = [&](float top, float bottom, bool down, float amount) {
@@ -951,7 +1057,7 @@ void drawSettings(D2D1_COLOR_F accent) {
 
   if (g.tab == kTabAccount) {
     drawAccountTab(accent);
-  } else if (g.tab == kTabCustomize) {
+  } else if (g.tab == kTabBackground || g.tab == kTabSpotify) {
     drawCustomizeTab(accent);
   } else {
     float y = kContentY;
@@ -1267,30 +1373,38 @@ void openColorMenu(const Row& r) {
   }
 }
 
-bool chooseBackgroundFile() {
+void saveSlots() {
+  std::string joined;
+  for (auto& f : filledSlots()) joined += (joined.empty() ? "" : "|") + f;
+  settings::set("bgFiles", joined);
+  applySetting("background");
+}
+
+void chooseSlotFile(size_t index) {
+  if (index >= g.slots.size()) return;
   wchar_t path[MAX_PATH] = {};
-  wcsncpy_s(path, widen(settings::get("bgFile")).c_str(), _TRUNCATE);
+  wcsncpy_s(path, widen(g.slots[index]).c_str(), _TRUNCATE);
   OPENFILENAMEW ofn{sizeof ofn};
   ofn.hwndOwner = g.hwnd;
   ofn.lpstrFilter = L"Images and videos\0*.png;*.jpg;*.jpeg;*.webp;*.gif;*.mp4;*.webm\0";
   ofn.lpstrFile = path;
   ofn.nMaxFile = MAX_PATH;
-  ofn.lpstrTitle = L"Choose a background";
+  ofn.lpstrTitle = L"Select a file for this slot";
   ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-  if (!GetOpenFileNameW(&ofn)) return false;
-  settings::set("bgFile", narrow(path));
-  settings::set("background", "custom");
-  applySetting("background");
-  return true;
+  if (!GetOpenFileNameW(&ofn) || index >= g.slots.size()) return;
+  g.slots[index] = narrow(path);
+  saveSlots();
+}
+
+void removeSlot(size_t index) {
+  if (index >= g.slots.size()) return;
+  g.slots.erase(g.slots.begin() + index);
+  saveSlots();
 }
 
 void openChoiceMenu(size_t index) {
   const Row& r = kRows[index];
   if (isColorRow(r)) return openColorMenu(r);
-  if (isFileRow(r)) {
-    chooseBackgroundFile();
-    return;
-  }
   std::vector<std::wstring> labels;
   std::vector<Choice> choices = std::string(r.key) == "monitor" ? monitorChoices(labels) : r.choices;
   std::string current = rowValue(r);
@@ -1304,12 +1418,7 @@ void openChoiceMenu(size_t index) {
   int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, g.hwnd, nullptr);
   DestroyMenu(m);
   if (cmd <= 0 || (size_t)cmd > choices.size() || current == choices[cmd - 1].value) return;
-  std::string picked = choices[cmd - 1].value;
-  if (std::string(r.key) == "background" && picked == "custom" && settings::get("bgFile").empty()) {
-    chooseBackgroundFile();
-    return;
-  }
-  setRow(r, picked);
+  setRow(r, choices[cmd - 1].value);
 }
 
 void selectTab(int tab) {
@@ -1323,6 +1432,13 @@ void selectTab(int tab) {
 void onClick(int id) {
   if (id >= kTabHit && id < kTabHit + kTabCount) {
     selectTab(id - kTabHit);
+  } else if (id == kSlotAddHit) {
+    if ((int)g.slots.size() < kMaxSlots) g.slots.push_back({});
+    invalidate();
+  } else if (id >= kSlotPickHit && id < kSlotPickHit + kMaxSlots) {
+    chooseSlotFile(id - kSlotPickHit);
+  } else if (id >= kSlotRemoveHit && id < kSlotRemoveHit + kMaxSlots) {
+    removeSlot(id - kSlotRemoveHit);
   } else if (id >= kRowHit && id < kRowHit + (int)kRows.size()) {
     size_t index = id - kRowHit;
     const Row& r = kRows[index];
@@ -1470,7 +1586,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_MOUSEWHEEL: {
       POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
       ScreenToClient(hwnd, &pt);
-      if (g.tab == kTabCustomize && pt.x / g.ui >= g.leftW && g.scrollMax > 0) {
+      if ((g.tab == kTabBackground || g.tab == kTabSpotify) && pt.x / g.ui >= g.leftW && g.scrollMax > 0) {
         g.scrollTarget = std::clamp(g.scrollTarget - GET_WHEEL_DELTA_WPARAM(wp) / 120.f * 72.f, 0.f, g.scrollMax);
         invalidate();
       }

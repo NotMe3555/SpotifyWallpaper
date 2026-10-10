@@ -125,8 +125,10 @@ std::string headerValue(const std::string& req, const char* name) {
 }
 
 // Streams the user's own background file; videos need byte ranges to loop and can be far too big to read whole.
-void serveBackground(SOCKET s, const std::string& range) {
-  std::string path = settings::get("bgFile"), ext = path.substr(std::min(path.find_last_of('.'), path.size()));
+void serveBackground(SOCKET s, size_t index, const std::string& range) {
+  auto files = settings::list("bgFiles");
+  std::string path = index < files.size() ? files[index] : std::string();
+  std::string ext = path.substr(std::min(path.find_last_of('.'), path.size()));
   for (auto& c : ext) c = (char)tolower((unsigned char)c);
   const char* type = mimeType(ext);
   HANDLE file = strncmp(type, "image/", 6) && strncmp(type, "video/", 6)
@@ -221,7 +223,7 @@ void handle(SOCKET s) {
     return respond(s, ok ? 200 : 409, "{}", "application/json");
   }
 
-  if (path == "/background") return serveBackground(s, headerValue(req, "range"));
+  if (path == "/background") return serveBackground(s, (size_t)atoi(query["i"].c_str()), headerValue(req, "range"));
 
 
   if (path == "/log") {

@@ -505,12 +505,17 @@ body[data-bg="black"] .bg { background: #000; }
 .bg__custom { position: absolute; inset: 0; display: none; }
 .bg__custom img,
 .bg__custom video {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 1.2s ease;
   filter: brightness(var(--custom-bright, 0.7));
 }
+.bg__custom .is-visible { opacity: 1; }
 body[data-bg="custom"] .bg__custom { display: block; }
 body[data-bg="custom"] .bg__art,
 body[data-bg="custom"] .bg__glow { display: none; }

@@ -29,7 +29,8 @@ const Default kDefaults[] = {
     {"motion", "on", true},
 
     {"background", "art", true},
-    {"bgFile", "", false},
+    {"bgFiles", "", false},
+    {"bgImageSeconds", "15", true},
     {"bgColor", "#07080b", true},
     {"bgColor2", "#1d1033", true},
     {"brightness", "normal", true},
@@ -92,6 +93,8 @@ void init(const std::wstring& dir) {
     else if (v.type() == Json::Number) g_values[d.key] = std::to_string((int)v.num());
     else g_values[d.key] = d.value;
   }
+  if (g_values["bgFiles"].empty()) g_values["bgFiles"] = saved["bgFile"].str();
+  g_values.erase("bgFile");
 }
 
 std::string get(const std::string& key) {
@@ -101,6 +104,19 @@ std::string get(const std::string& key) {
 }
 
 bool on(const std::string& key) { return get(key) == "on"; }
+
+// File lists are stored as one string split by '|', which can't appear in a Windows path.
+std::vector<std::string> list(const std::string& key) {
+  std::vector<std::string> out;
+  std::string all = get(key);
+  for (size_t start = 0; start <= all.size();) {
+    size_t end = all.find('|', start);
+    if (end == std::string::npos) end = all.size();
+    if (end > start) out.push_back(all.substr(start, end - start));
+    start = end + 1;
+  }
+  return out;
+}
 
 void set(const std::string& key, const std::string& value) {
   std::lock_guard<std::mutex> lock(g_mutex);

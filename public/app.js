@@ -45,19 +45,62 @@
   let settings = {};
   let lastArtImg = null;
 
-  let customBgSrc = '';
-  function updateCustomBg() {
-    const file = settings.background === 'custom' ? settings.bgFile || '' : '';
-    const src = file ? '/background?v=' + encodeURIComponent(file) : '';
-    if (src === customBgSrc) return;
-    customBgSrc = src;
-    el.bgCustom.innerHTML = '';
-    if (!src) return;
-    const isVideo = /\.(mp4|webm)$/i.test(file);
+  // The user's own backgrounds: an image stays for the chosen time, a video plays through, then the next fades in.
+  const customBg = { key: '', files: [], index: 0, seconds: 15, timer: null, current: null };
+  const CUSTOM_FADE_MS = 1200;
+
+  function showCustomBg(index, failures = 0) {
+    clearTimeout(customBg.timer);
+    const { files, key } = customBg;
+    if (!files.length) return;
+    index = ((index % files.length) + files.length) % files.length;
+    customBg.index = index;
+    const isVideo = /\.(mp4|webm)$/i.test(files[index]);
     const media = document.createElement(isVideo ? 'video' : 'img');
-    if (isVideo) Object.assign(media, { muted: true, loop: true, autoplay: true, playsInline: true });
-    media.src = src;
+    const next = () => { if (customBg.key === key && customBg.current === media) showCustomBg(index + 1); };
+    const reveal = () => {
+      if (customBg.key !== key) return media.remove();
+      const old = customBg.current;
+      customBg.current = media;
+      void media.offsetWidth;
+      media.classList.add('is-visible');
+      if (old) setTimeout(() => old.remove(), CUSTOM_FADE_MS + 100);
+      if (!isVideo && files.length > 1) customBg.timer = setTimeout(next, customBg.seconds * 1000);
+    };
+    const skip = () => {
+      media.remove();
+      if (customBg.key === key && failures + 1 < files.length) showCustomBg(index + 1, failures + 1);
+    };
+    if (isVideo) {
+      Object.assign(media, { muted: true, autoplay: true, playsInline: true, loop: files.length === 1 });
+      media.addEventListener('loadeddata', reveal, { once: true });
+      media.addEventListener('ended', next);
+    } else {
+      media.addEventListener('load', reveal, { once: true });
+    }
+    media.addEventListener('error', skip, { once: true });
+    media.src = '/background?i=' + index + '&v=' + encodeURIComponent(files[index]);
     el.bgCustom.appendChild(media);
+  }
+
+  function updateCustomBg() {
+    const files = settings.background === 'custom' ? (settings.bgFiles || '').split('|').filter(Boolean) : [];
+    const key = files.join('|');
+    const seconds = Math.max(1, parseInt(settings.bgImageSeconds, 10) || 15);
+    const secondsChanged = seconds !== customBg.seconds;
+    customBg.seconds = seconds;
+    if (key === customBg.key) {
+      const onImage = customBg.current && customBg.current.tagName === 'IMG';
+      if (secondsChanged && onImage && files.length > 1) {
+        clearTimeout(customBg.timer);
+        customBg.timer = setTimeout(() => showCustomBg(customBg.index + 1), seconds * 1000);
+      }
+      return;
+    }
+    clearTimeout(customBg.timer);
+    Object.assign(customBg, { key, files, index: 0, current: null });
+    el.bgCustom.innerHTML = '';
+    if (files.length) showCustomBg(0);
   }
 
   function applySettings(next) {
@@ -971,8 +1014,7 @@
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    const customVideo = el.bgCustom.querySelector('video');
-    if (customVideo) customVideo.play().catch(() => {});
+    if (customBg.current && customBg.current.tagName === 'VIDEO') customBg.current.play().catch(() => {});
     video.stuckSince = 0;
     video.lastTime = -1;
     repollSoon(0);
