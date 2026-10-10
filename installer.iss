@@ -32,9 +32,6 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: ".release\app\SpotifyWallpaper.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "public\*"; DestDir: "{app}\public"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "LICENSE-WebView2.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"

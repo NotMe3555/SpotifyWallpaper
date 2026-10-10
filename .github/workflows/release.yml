@@ -26,7 +26,7 @@ jobs:
           New-Item -ItemType Directory -Force .release\portable | Out-Null
           Copy-Item .release\app\* .release\portable\
           Copy-Item public .release\portable\public -Recurse
-          Copy-Item README.md, LICENSE, LICENSE-WebView2.txt, THIRD_PARTY_NOTICES.md .release\portable\
+          Copy-Item README.md .release\portable\
           Compress-Archive -Path .release\portable\* -DestinationPath .release\SpotifyWallpaper-portable.zip -Force
 
       - name: Install Inno Setup

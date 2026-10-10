@@ -255,7 +255,7 @@
   const REVEAL_AFTER_MS = 3500;
   const REVEAL_AGAIN_MS = 1200;
   const FADE_OUT_MS = 400;
-  const END_MARGIN_S = 22;
+  const END_MARGIN_S = 7;
   let ytApi = null;
 
   function loadYouTubeApi() {
@@ -275,7 +275,7 @@
   const isMoving = (p) => playerReady(p) && p.getPlayerState() === YT.PlayerState.PLAYING;
   const nearEnd = (p) => {
     const length = p.getDuration() || 0;
-    return length > 0 && (p.getCurrentTime() || 0) > Math.max(length * 0.5, length - END_MARGIN_S);
+    return length > 0 && (p.getCurrentTime() || 0) > length - END_MARGIN_S;
   };
 
   function resetReveal(delay) {
@@ -368,7 +368,7 @@
       videoId: id,
       playerVars: {
         autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3,
-        modestbranding: 1, playsinline: 1, rel: 0, start: Math.floor(start),
+        playsinline: 1, rel: 0, start: Math.floor(start),
         origin: location.origin, enablejsapi: 1,
         cc_load_policy: 0,
       },
@@ -449,6 +449,12 @@
     video.lastTime = t;
     if (moving) {
       video.stuckSince = 0;
+      const target = position() / 1000;
+      if (Math.abs(t - target) > 1.25) {
+        cutVideo(true);
+        p.seekTo(target, true);
+        return;
+      }
       startReveal();
       return;
     }
@@ -464,7 +470,7 @@
       try { p.seekTo(position() / 1000, true); p.playVideo(); } catch {}
     }
   }
-  setInterval(videoWatchdog, 1500);
+  setInterval(videoWatchdog, 750);
 
 
   function hideCaptions(p) {
