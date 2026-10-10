@@ -140,6 +140,10 @@
     return 'Couldn’t reach Spotify';
   }
 
+  function isNetworkFailure(err) {
+    return err instanceof TypeError;
+  }
+
   function swapText(node, text) {
     if (node.textContent === text) return;
     node.textContent = text;
@@ -839,10 +843,14 @@
     try {
       await api('PUT', next ? '/me/player/play' : '/me/player/pause');
     } catch (err) {
-      state.isPlaying = !next;
-      state.playLockUntil = 0;
-      renderPlaying(!next);
-      toast(explain(err));
+      if (isNetworkFailure(err)) {
+        state.playLockUntil = 0;
+      } else {
+        state.isPlaying = !next;
+        state.playLockUntil = 0;
+        renderPlaying(!next);
+        toast(explain(err));
+      }
     }
     repollSoon(700);
   }
@@ -851,7 +859,7 @@
     try {
       await api('POST', dir > 0 ? '/me/player/next' : '/me/player/previous');
     } catch (err) {
-      toast(explain(err));
+      if (!isNetworkFailure(err)) toast(explain(err));
     }
     repollSoon(500);
   }
@@ -867,7 +875,7 @@
       try {
         await api('PUT', `/me/player/volume?volume_percent=${v}`);
       } catch (err) {
-        toast(explain(err));
+        if (!isNetworkFailure(err)) toast(explain(err));
       }
     }, immediate ? 0 : 180);
   }
@@ -880,7 +888,7 @@
     try {
       await api('PUT', `/me/player/seek?position_ms=${pos}`);
     } catch (err) {
-      toast(explain(err));
+      if (!isNetworkFailure(err)) toast(explain(err));
     }
     repollSoon(600);
   }
