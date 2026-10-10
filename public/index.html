@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Now Playing</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="is-empty">
+
+  <div class="bg" aria-hidden="true">
+    <div class="bg__art" id="bgA"></div>
+    <div class="bg__art" id="bgB"></div>
+    <div class="bg__video" id="bgVideo"></div>
+    <div class="bg__glow"></div>
+    <canvas class="viz-bars" id="vizBars"></canvas>
+    <div class="bg__vignette"></div>
+    <div class="bg__grain"></div>
+  </div>
+
+
+  <header class="clock">
+    <div class="clock__time" id="clockTime">--:--</div>
+    <div class="clock__date" id="clockDate"></div>
+  </header>
+
+
+  <main class="player" id="player">
+    <div class="art">
+      <img class="art__img" id="artA" alt="">
+      <img class="art__img" id="artB" alt="">
+      <div class="art__video" id="artVideo"></div>
+      <canvas class="viz-ring" id="vizRing"></canvas>
+      <div class="art__placeholder">
+        <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </div>
+    </div>
+
+    <section class="meta">
+      <div class="eyebrow">
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span id="status">Nothing playing</span>
+      </div>
+      <h1 class="title" id="title">Quiet for now</h1>
+      <p class="artist" id="artist">Start something on Spotify</p>
+      <p class="album" id="album"></p>
+
+      <div class="progress">
+        <div class="progress__track" id="progressTrack">
+          <div class="progress__fill" id="progressFill"></div>
+        </div>
+        <div class="progress__times">
+          <span id="elapsed">0:00</span>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="transport">
+          <button class="btn" id="prevBtn" title="Previous" aria-label="Previous">
+            <svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5 9 12l10 7z" class="fill"/></svg>
+          </button>
+          <button class="btn btn--main" id="playBtn" title="Play / Pause" aria-label="Play or pause">
+            <svg viewBox="0 0 24 24" class="icon-play"><path d="M8 5.5v13l11-6.5z" class="fill"/></svg>
+            <svg viewBox="0 0 24 24" class="icon-pause"><path d="M8 5v14M16 5v14"/></svg>
+          </button>
+          <button class="btn" id="nextBtn" title="Next" aria-label="Next">
+            <svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z" class="fill"/></svg>
+          </button>
+        </div>
+
+        <div class="volume">
+          <button class="btn btn--small" id="muteBtn" title="Mute" aria-label="Mute">
+            <svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" class="fill"/><path id="volWave1" d="M16.5 9.5a3.5 3.5 0 0 1 0 5"/><path id="volWave2" d="M19 7a7 7 0 0 1 0 10"/></svg>
+          </button>
+          <input type="range" id="volume" min="0" max="100" value="50" aria-label="Volume">
+        </div>
+      </div>
+
+      <div class="device" id="device"></div>
+    </section>
+  </main>
+
+
+  <div class="connect" id="connect">
+    <p>Connect your Spotify account to begin.</p>
+    <a class="connect__btn" href="/login">Connect Spotify</a>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

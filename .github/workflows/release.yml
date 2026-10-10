@@ -1,0 +1,46 @@
+name: Build and publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build application
+        shell: cmd
+        run: build.bat .release\app
+
+      - name: Package portable build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .release\portable | Out-Null
+          Copy-Item .release\app\* .release\portable\
+          Copy-Item public .release\portable\public -Recurse
+          Copy-Item README.md, LICENSE, LICENSE-DPP.txt, LICENSE-WebView2.txt, THIRD_PARTY_NOTICES.md .release\portable\
+          Compress-Archive -Path .release\portable\* -DestinationPath .release\SpotifyWallpaper-portable.zip -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: winget install --id JRSoftware.InnoSetup -e --silent --accept-package-agreements --accept-source-agreements
+
+      - name: Build installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss'
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            .release/SpotifyWallpaper-portable.zip
+            .release/SpotifyWallpaper-setup.exe

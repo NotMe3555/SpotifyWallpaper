@@ -1,0 +1,20 @@
+config.json
+tokens.json
+settings.json
+videos*.json
+video.log
+*.log
+SpotifyWallpaper.exe
+*.dll
+build/
+release-build/
+release/
+.release/
+third_party/
+*.obj
+*.res
+*.pdb
+*.ilk
+*.exp
+*.lib
+Spotify Wallpaper/
