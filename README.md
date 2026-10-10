@@ -72,8 +72,6 @@ The installer source is `installer.iss`; compile it with the Inno Setup compiler
 
 YouTube videos depend on embed availability and API quota: a key gets 100 video searches a day, and each song is only searched once.
 
-## Open source and third-party software
-
-This project is licensed under the MIT License. Bundled third-party components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## Trademarks
 
 Spotify, YouTube, Microsoft, and their respective marks belong to their owners. Spotify Wallpaper is an independent project and is not affiliated with Spotify AB.
