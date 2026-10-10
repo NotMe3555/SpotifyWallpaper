@@ -31,12 +31,12 @@ rc /nologo /fo build\app.res src\app.rc || exit /b 1
 cl /nologo /std:c++20 /O2 /EHsc /W3 /utf-8 /MD /bigobj /wd4251 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX ^
   /I "%WV2%\include" /Fobuild\ /Fdbuild\ /Fe:"%OUT%\SpotifyWallpaper.exe" ^
   src\main.cpp src\auth.cpp src\server.cpp src\spotify.cpp src\http_client.cpp src\json.cpp src\util.cpp ^
-  src\wallpaper.cpp src\settings.cpp src\youtube.cpp src\lyrics.cpp src\audio.cpp ^
+  src\wallpaper.cpp src\settings.cpp src\youtube.cpp src\lyrics.cpp src\audio.cpp src\media.cpp ^
   build\app.res ^
   /link /SUBSYSTEM:WINDOWS ^
   user32.lib gdi32.lib shell32.lib ole32.lib advapi32.lib comctl32.lib dwmapi.lib d2d1.lib dwrite.lib ^
   dxguid.lib windowscodecs.lib winhttp.lib ws2_32.lib bcrypt.lib crypt32.lib shlwapi.lib version.lib comdlg32.lib ^
-  mmdevapi.lib "%WV2%\x64\WebView2LoaderStatic.lib" || exit /b 1
+  mmdevapi.lib windowsapp.lib "%WV2%\x64\WebView2LoaderStatic.lib" || exit /b 1
 
 echo.
 echo Built SpotifyWallpaper.exe

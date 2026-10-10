@@ -14,9 +14,14 @@
 namespace youtube {
 namespace {
 
-std::mutex g_mutex;
+constexpr ULONGLONG kQuotaBackoffMs = 30 * 60 * 1000, kErrorBackoffMs = 60 * 1000;
+
+std::mutex g_mutex, g_lookupMutex;
 std::map<std::string, std::string> g_cache;
 std::wstring g_file;
+std::string g_lastError;
+ULONGLONG g_retryAt;
+bool g_quotaHit;
 
 std::string lower(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)tolower(c); });
@@ -100,6 +105,17 @@ std::string findVideo(const std::string& artist, const std::string& title, std::
     error = "no_key";
     return {};
   }
+  // Every monitor asks for the same song at once, and a search costs 1 of only 100 a day.
+  std::lock_guard<std::mutex> lookup(g_lookupMutex);
+  {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto it = g_cache.find(key);
+    if (it != g_cache.end()) return it->second;
+    if (GetTickCount64() < g_retryAt) {
+      error = g_lastError;
+      return {};
+    }
+  }
   std::string firstArtist = artist.substr(0, artist.find(','));
   std::string q = firstArtist + " " + cleanTitle(title) + " official music video";
   HttpResponse r = httpRequest(
@@ -109,6 +125,11 @@ std::string findVideo(const std::string& artist, const std::string& title, std::
   if (r.status != 200) {
     Json body = Json::parse(r.body);
     error = body["error"]["errors"][(size_t)0]["reason"].str(r.status ? "HTTP " + std::to_string(r.status) : r.error);
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_quotaHit = r.status == 429 || error == "quotaExceeded" || error == "rateLimitExceeded" ||
+                 error == "dailyLimitExceeded";
+    g_lastError = error;
+    g_retryAt = GetTickCount64() + (g_quotaHit ? kQuotaBackoffMs : kErrorBackoffMs);
     return {};
   }
   Json items = Json::parse(r.body)["items"];
@@ -122,9 +143,15 @@ std::string findVideo(const std::string& artist, const std::string& title, std::
   std::string best;
   for (size_t i = 0; i < ranked.size() && i < 3; ++i) best += (i ? "," : "") + ranked[i].second;
   std::lock_guard<std::mutex> lock(g_mutex);
+  g_quotaHit = false;
   g_cache[key] = best;
   save();
   return best;
+}
+
+bool quotaExceeded() {
+  std::lock_guard<std::mutex> lock(g_mutex);
+  return g_quotaHit && GetTickCount64() < g_retryAt;
 }
 
 }

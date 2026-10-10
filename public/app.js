@@ -1,5 +1,4 @@
 (() => {
-  const API = 'https://api.spotify.com/v1';
   const POLL_MS = 2000;
   const POLL_HIDDEN_MS = 10000;
 
@@ -14,7 +13,7 @@
     prevBtn: $('prevBtn'), playBtn: $('playBtn'), nextBtn: $('nextBtn'),
     muteBtn: $('muteBtn'), volume: $('volume'), volWave1: $('volWave1'), volWave2: $('volWave2'),
     device: $('device'), toast: $('toast'),
-    bgVideo: $('bgVideo'), artVideo: $('artVideo'), vizBars: $('vizBars'), vizRing: $('vizRing'),
+    bgCustom: $('bgCustom'), bgVideo: $('bgVideo'), artVideo: $('artVideo'), vizBars: $('vizBars'), vizRing: $('vizRing'),
     lyricsPlayerPrevious: $('lyricsPlayerPrevious'), lyricsPlayerActive: $('lyricsPlayerActive'),
     lyricsPlayerNext: $('lyricsPlayerNext'), lyricsScreenPrevious: $('lyricsScreenPrevious'),
     lyricsScreenActive: $('lyricsScreenActive'), lyricsScreenNext: $('lyricsScreenNext'),
@@ -46,6 +45,21 @@
   let settings = {};
   let lastArtImg = null;
 
+  let customBgSrc = '';
+  function updateCustomBg() {
+    const file = settings.background === 'custom' ? settings.bgFile || '' : '';
+    const src = file ? '/background?v=' + encodeURIComponent(file) : '';
+    if (src === customBgSrc) return;
+    customBgSrc = src;
+    el.bgCustom.innerHTML = '';
+    if (!src) return;
+    const isVideo = /\.(mp4|webm)$/i.test(file);
+    const media = document.createElement(isVideo ? 'video' : 'img');
+    if (isVideo) Object.assign(media, { muted: true, loop: true, autoplay: true, playsInline: true });
+    media.src = src;
+    el.bgCustom.appendChild(media);
+  }
+
   function applySettings(next) {
     if (!next || typeof next !== 'object') return;
     settings = next;
@@ -69,6 +83,7 @@
     else if (lastArtImg) extractAccent(lastArtImg);
     else document.documentElement.style.setProperty('--accent', '170 185 210');
     if (next.idleFade === 'off') body.classList.remove('is-idle');
+    updateCustomBg();
     updateClock();
     updateVideo(state.item);
     requestLyrics(state.item);
@@ -87,34 +102,27 @@
   }
 
 
-  let token = null;
-  let tokenExp = 0;
-
   class ApiError extends Error {
     constructor(status, message, reason) { super(message); this.status = status; this.reason = reason; }
   }
 
-  async function getToken() {
-    if (token && Date.now() < tokenExp - 30_000) return token;
-    const res = await fetch('/token', { cache: 'no-store' });
-    if (!res.ok) { token = null; throw new ApiError(401, 'not_authenticated'); }
-    const data = await res.json();
-    token = data.access_token;
-    tokenExp = data.expires_at;
-    return token;
+  // Playback is driven through the Spotify app on this PC; the wallpaper never calls Spotify's web API.
+  async function control(cmd, params = {}) {
+    const q = new URLSearchParams({ cmd, ...params });
+    const res = await fetch('/control?' + q, { cache: 'no-store', headers: { 'X-Wallpaper': '1' } });
+    if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
   }
 
-  async function api(method, path) {
-    const t = await getToken();
-    const res = await fetch(API + path, { method, headers: { Authorization: `Bearer ${t}` } });
-    if (res.status === 401) token = null;
+  async function playerState() {
+    const res = await fetch('/player', { cache: 'no-store' });
     if (!res.ok) {
       let err = {};
       try { err = (await res.json()).error || {}; } catch {}
       throw new ApiError(res.status, err.message || `HTTP ${res.status}`, err.reason);
     }
-    const text = await res.text();
-    return text ? JSON.parse(text) : null;
+    const { age, player } = await res.json();
+    if (player && player.is_playing && player.progress_ms != null) player.progress_ms += age;
+    return player;
   }
 
 
@@ -132,12 +140,8 @@
   }
 
   function explain(err) {
-    if (err.status === 404 || err.reason === 'NO_ACTIVE_DEVICE') return 'Open Spotify on a device to start listening';
-    if (err.reason === 'VOLUME_CONTROL_DISALLOW') return 'This device doesn’t allow volume control';
-    if (err.reason === 'PREMIUM_REQUIRED') return 'Playback controls need Spotify Premium';
-    if (err.status === 403) return 'That action isn’t allowed right now';
-    if (err.status === 429) return 'Spotify is rate limiting — slowing down';
-    return 'Couldn’t reach Spotify';
+    if (err.status === 409) return 'Open Spotify on this PC to control playback';
+    return 'Couldn’t reach the Spotify Wallpaper app';
   }
 
   function isNetworkFailure(err) {
@@ -251,12 +255,25 @@
     key: null, mode: null, id: null, player: null, shown: false, failed: new Set(),
     candidates: [], playingSince: 0, revealTimer: null, revealDelay: 0,
     loading: false, noMatch: false, retryAt: 0, lastTime: -1, stuckSince: 0,
+    seekAt: 0, settling: false, lead: 0.5,
   };
   const REVEAL_AFTER_MS = 3500;
   const REVEAL_AGAIN_MS = 1200;
   const FADE_OUT_MS = 400;
   const END_MARGIN_S = 7;
+  const SEEK_DRIFT_S = 3;
+  const NUDGE_DRIFT_S = 0.4;
+  const SEEK_COOLDOWN_MS = 5000;
   let ytApi = null;
+
+  // YouTube picks its stream from the player's size, so a full 4K-wide iframe pulls 4K and stalls.
+  const VIDEO_W = 1920, VIDEO_H = 1080;
+  function fitVideo() {
+    const fit = Math.max(innerWidth / VIDEO_W, innerHeight / VIDEO_H) * 1.2;
+    document.documentElement.style.setProperty('--video-fit', String(fit));
+  }
+  fitVideo();
+  window.addEventListener('resize', fitVideo);
 
   function loadYouTubeApi() {
     if (!ytApi) {
@@ -449,28 +466,54 @@
     video.lastTime = t;
     if (moving) {
       video.stuckSince = 0;
-      const target = position() / 1000;
-      if (Math.abs(t - target) > 1.25) {
+      const drift = t - position() / 1000;
+      const sinceSeek = now - video.seekAt;
+      if (video.settling) {
+        if (sinceSeek < 1000) return;
+        video.settling = false;
+        video.lead = Math.max(0, Math.min(5, video.lead - drift));
+      }
+      if (Math.abs(drift) > SEEK_DRIFT_S && sinceSeek > SEEK_COOLDOWN_MS) {
         cutVideo(true);
-        p.seekTo(target, true);
+        seekVideo(p);
         return;
       }
+      nudgeVideo(p, drift);
       startReveal();
       return;
     }
     cutVideo(false);
     if (!video.stuckSince) { video.stuckSince = now; return; }
     const stuckFor = now - video.stuckSince;
-    if (stuckFor > 15000) {
+    if (stuckFor > 20000) {
       video.stuckSince = 0;
       video.key = null;
       destroyVideo();
       updateVideo(state.item);
-    } else if (stuckFor > 2500) {
-      try { p.seekTo(position() / 1000, true); p.playVideo(); } catch {}
+    } else if (stuckFor > 2500 && now - video.seekAt > SEEK_COOLDOWN_MS) {
+      video.lead = Math.min(5, video.lead + 1.5);
+      try { seekVideo(p); p.playVideo(); } catch {}
     }
   }
   setInterval(videoWatchdog, 750);
+
+  // Seeking rebuffers, so aim ahead by however long the last seek took to start playing.
+  function seekVideo(p) {
+    video.seekAt = performance.now();
+    video.settling = true;
+    p.seekTo(position() / 1000 + video.lead, true);
+  }
+
+  // Small drift is closed by playing slightly fast or slow instead of rebuffering.
+  function nudgeVideo(p, drift) {
+    const off = Math.abs(drift);
+    const current = p.getPlaybackRate();
+    let rate = 1;
+    if (off > (current === 1 ? NUDGE_DRIFT_S : 0.1)) {
+      rate = drift > 0 ? (off > 1.5 ? 0.5 : 0.75) : (off > 1.5 ? 1.5 : 1.25);
+    }
+    if (rate !== current) p.setPlaybackRate(rate);
+  }
 
 
   function hideCaptions(p) {
@@ -498,9 +541,9 @@
       return;
     }
     if (!playing) p.playVideo();
-    if (force || Math.abs(p.getCurrentTime() - target) > 2.5) {
+    if (force) {
       if (video.shown) cutVideo(true);
-      p.seekTo(target, true);
+      seekVideo(p);
     }
   }
 
@@ -816,25 +859,16 @@
   let pollTimer;
   async function poll() {
     clearTimeout(pollTimer);
-    let delay = document.hidden ? POLL_HIDDEN_MS : POLL_MS;
     try {
-      const data = await api('GET', '/me/player?additional_types=track,episode');
-      body.classList.remove('needs-auth');
-      render(data);
+      render(await playerState());
     } catch (err) {
-      if (err.status === 401 && err.message === 'not_authenticated') {
-        body.classList.add('needs-auth');
-        delay = 3000;
-      } else if (err.status === 429) {
-        delay = 15000;
-      } else {
-        console.warn(err);
-      }
+      console.warn(err);
     }
-    pollTimer = setTimeout(poll, delay);
+    pollTimer = setTimeout(poll, document.hidden ? POLL_HIDDEN_MS : POLL_MS);
   }
 
   const repollSoon = (ms = 450) => { clearTimeout(pollTimer); pollTimer = setTimeout(poll, ms); };
+  window.pollNow = () => repollSoon(0);
 
 
   async function togglePlay() {
@@ -847,7 +881,7 @@
     renderPlaying(next);
     syncVideo(false);
     try {
-      await api('PUT', next ? '/me/player/play' : '/me/player/pause');
+      await control(next ? 'play' : 'pause');
     } catch (err) {
       if (isNetworkFailure(err)) {
         state.playLockUntil = 0;
@@ -863,7 +897,7 @@
 
   async function skip(dir) {
     try {
-      await api('POST', dir > 0 ? '/me/player/next' : '/me/player/previous');
+      await control(dir > 0 ? 'next' : 'previous');
     } catch (err) {
       if (!isNetworkFailure(err)) toast(explain(err));
     }
@@ -879,7 +913,7 @@
     clearTimeout(volTimer);
     volTimer = setTimeout(async () => {
       try {
-        await api('PUT', `/me/player/volume?volume_percent=${v}`);
+        await control('volume', { v });
       } catch (err) {
         if (!isNetworkFailure(err)) toast(explain(err));
       }
@@ -892,7 +926,7 @@
     state.progress = pos;
     state.syncedAt = performance.now();
     try {
-      await api('PUT', `/me/player/seek?position_ms=${pos}`);
+      await control('seek', { ms: pos });
     } catch (err) {
       if (!isNetworkFailure(err)) toast(explain(err));
     }
@@ -937,6 +971,8 @@
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
+    const customVideo = el.bgCustom.querySelector('video');
+    if (customVideo) customVideo.play().catch(() => {});
     video.stuckSince = 0;
     video.lastTime = -1;
     repollSoon(0);

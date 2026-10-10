@@ -422,36 +422,6 @@ body[data-lyrics-size="large"] .lyrics--screen .lyrics__line--active { font-size
 .is-empty .controls { opacity: 0.25; pointer-events: none; }
 
 
-.connect {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  background: rgba(7, 8, 11, 0.6);
-  backdrop-filter: blur(20px);
-  color: var(--text-2);
-  font-size: 15px;
-}
-.needs-auth .connect { display: flex; }
-.needs-auth .player { opacity: 0.15; filter: blur(6px); }
-.connect p { margin: 0; letter-spacing: 0.02em; }
-.connect__btn {
-  padding: 13px 28px;
-  border-radius: 999px;
-  background: rgba(240, 242, 246, 0.92);
-  color: #0b0c0f;
-  text-decoration: none;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  transition: transform 0.2s var(--ease), background 0.2s var(--ease);
-}
-.connect__btn:hover { background: #fff; transform: translateY(-1px); }
-
-
 .toast {
   position: fixed;
   left: 50%;
@@ -532,6 +502,21 @@ body[data-bg="black"] .bg__grain { display: none; }
 body[data-bg="gradient"] .bg { background: linear-gradient(160deg, var(--bg), var(--bg-color2, #1d1033)); }
 body[data-bg="black"] .bg { background: #000; }
 
+.bg__custom { position: absolute; inset: 0; display: none; }
+.bg__custom img,
+.bg__custom video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(var(--custom-bright, 0.7));
+}
+body[data-bg="custom"] .bg__custom { display: block; }
+body[data-bg="custom"] .bg__art,
+body[data-bg="custom"] .bg__glow { display: none; }
+body[data-brightness="dim"] { --custom-bright: 0.45; }
+body[data-brightness="bright"] { --custom-bright: 1; }
+
 .no-vignette .bg__vignette { display: none; }
 
 
@@ -560,11 +545,9 @@ body[data-bg="black"] .bg { background: #000; }
   transform: translate(-50%, -50%);
 }
 .bg__video iframe {
-  width: 100vw;
-  height: 56.25vw;
-  min-width: 177.78vh;
-  min-height: 100vh;
-  transform: translate(-50%, -50%) scale(1.2);
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--video-fit, 1.2));
 }
 .art__video iframe { width: 177.78%; height: 100%; transform: translate(-50%, -50%) scale(1.25); }
 .bg__video iframe,

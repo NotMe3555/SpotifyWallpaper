@@ -3,14 +3,18 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "auth.h"
 #include "json.h"
 #include "lyrics.h"
+#include "media.h"
 #include "settings.h"
+#include "spotify.h"
 #include "youtube.h"
 #include "util.h"
 
@@ -31,6 +35,9 @@ const char* mimeType(const std::string& path) {
   if (ext == ".png") return "image/png";
   if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
   if (ext == ".webp") return "image/webp";
+  if (ext == ".gif") return "image/gif";
+  if (ext == ".mp4") return "video/mp4";
+  if (ext == ".webm") return "video/webm";
   if (ext == ".ico") return "image/x-icon";
   if (ext == ".woff2") return "font/woff2";
   return "application/octet-stream";
@@ -105,6 +112,69 @@ void serveStatic(SOCKET s, std::string path) {
   respond(s, 200, data, mimeType(path));
 }
 
+std::string headerValue(const std::string& req, const char* name) {
+  std::string lower = req.substr(0, req.find("\r\n\r\n"));
+  for (auto& c : lower) c = (char)tolower((unsigned char)c);
+  size_t at = lower.find(std::string("\r\n") + name + ":");
+  if (at == std::string::npos) return {};
+  at += strlen(name) + 3;
+  size_t end = lower.find("\r\n", at);
+  std::string v = lower.substr(at, end == std::string::npos ? end : end - at);
+  size_t first = v.find_first_not_of(' ');
+  return first == std::string::npos ? std::string() : v.substr(first);
+}
+
+// Streams the user's own background file; videos need byte ranges to loop and can be far too big to read whole.
+void serveBackground(SOCKET s, const std::string& range) {
+  std::string path = settings::get("bgFile"), ext = path.substr(std::min(path.find_last_of('.'), path.size()));
+  for (auto& c : ext) c = (char)tolower((unsigned char)c);
+  const char* type = mimeType(ext);
+  HANDLE file = strncmp(type, "image/", 6) && strncmp(type, "video/", 6)
+                    ? INVALID_HANDLE_VALUE
+                    : CreateFileW(widen(path).c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                  nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) return respond(s, 404, "Not found", "text/plain");
+  LARGE_INTEGER li{};
+  GetFileSizeEx(file, &li);
+  int64_t size = li.QuadPart, from = 0, to = size - 1;
+  bool partial = false;
+  if (range.rfind("bytes=", 0) == 0 && size > 0) {
+    size_t dash = range.find('-', 6);
+    std::string a = range.substr(6, dash == std::string::npos ? dash : dash - 6);
+    std::string b = dash == std::string::npos ? "" : range.substr(dash + 1);
+    if (!a.empty()) {
+      from = _atoi64(a.c_str());
+      if (!b.empty()) to = std::min<int64_t>(to, _atoi64(b.c_str()));
+    } else if (!b.empty()) {
+      from = std::max<int64_t>(0, size - _atoi64(b.c_str()));
+    }
+    partial = from >= 0 && from <= to;
+    if (!partial) from = 0, to = size - 1;
+  }
+  int64_t left = to - from + 1;
+  std::string head = std::string("HTTP/1.1 ") + (partial ? "206 Partial Content" : "200 OK") + "\r\nContent-Type: " + type +
+                     "\r\nContent-Length: " + std::to_string(left) + "\r\nAccept-Ranges: bytes\r\n";
+  if (partial)
+    head += "Content-Range: bytes " + std::to_string(from) + "-" + std::to_string(to) + "/" + std::to_string(size) + "\r\n";
+  sendAll(s, head + "Cache-Control: no-store\r\nConnection: close\r\n\r\n");
+  li.QuadPart = from;
+  SetFilePointerEx(file, li, nullptr, FILE_BEGIN);
+  std::vector<char> buf(256 * 1024);
+  while (left > 0) {
+    DWORD got = 0;
+    if (!ReadFile(file, buf.data(), (DWORD)std::min<int64_t>(left, (int64_t)buf.size()), &got, nullptr) || !got) break;
+    int sent = 0;
+    while (sent < (int)got) {
+      int n = send(s, buf.data() + sent, (int)got - sent, 0);
+      if (n <= 0) break;
+      sent += n;
+    }
+    if (sent < (int)got) break;
+    left -= got;
+  }
+  CloseHandle(file);
+}
+
 void handle(SOCKET s) {
   DWORD timeout = 5000;
   setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof timeout);
@@ -127,36 +197,31 @@ void handle(SOCKET s) {
 
   if (method != "GET" && method != "HEAD") return respond(s, 405, "Method not allowed", "text/plain");
 
-  if (path == "/login") {
-    if (!auth::hasCredentials())
-      return respond(s, 500,
-                     messagePage("Missing app credentials",
-                                 "Open the Spotify Wallpaper window and enter your app's Client ID and Client "
-                                 "Secret, then try again."),
-                     "text/html; charset=utf-8");
-    return redirect(s, auth::beginLogin());
-  }
-
-  if (path == "/callback") {
-    if (!query["error"].empty())
-      return respond(s, 400, messagePage("Login cancelled", "Spotify said: " + query["error"]),
-                     "text/html; charset=utf-8");
-    std::string error;
-    if (!auth::completeLogin(query["state"], query["code"], error))
-      return respond(s, 400, messagePage("Login failed", error), "text/html; charset=utf-8");
-    return redirect(s, "/");
-  }
-
-  if (path == "/token") {
-    int64_t expiresAt = 0;
-    std::string token = auth::accessToken(&expiresAt);
-    if (token.empty()) return respond(s, 401, "{\"error\":\"not_authenticated\"}", "application/json");
-    return respond(s, 200,
-                   "{\"access_token\":" + jsonEscape(token) + ",\"expires_at\":" + std::to_string(expiresAt) + "}",
-                   "application/json");
-  }
-
   if (path == "/settings") return respond(s, 200, settings::json(), "application/json");
+
+  if (path == "/player") return respond(s, 200, spotify::playerJson(), "application/json");
+
+  if (path == "/art") {
+    std::string art = media::art();
+    if (art.empty()) return respond(s, 404, "Not found", "text/plain");
+    return respond(s, 200, art, art.rfind("\x89PNG", 0) == 0 ? "image/png" : "image/jpeg");
+  }
+
+  // Only the wallpaper page sends this header; another site can't add it to a request made from a browser.
+  if (path == "/control") {
+    if (headerValue(req, "x-wallpaper").empty()) return respond(s, 403, "Forbidden", "text/plain");
+    std::string cmd = query["cmd"];
+    bool ok = cmd == "play"       ? media::send(media::Command::Play)
+              : cmd == "pause"    ? media::send(media::Command::Pause)
+              : cmd == "next"     ? media::send(media::Command::Next)
+              : cmd == "previous" ? media::send(media::Command::Previous)
+              : cmd == "seek"     ? media::seek(_atoi64(query["ms"].c_str()))
+              : cmd == "volume"   ? media::setVolume(atoi(query["v"].c_str()))
+                                  : false;
+    return respond(s, ok ? 200 : 409, "{}", "application/json");
+  }
+
+  if (path == "/background") return serveBackground(s, headerValue(req, "range"));
 
 
   if (path == "/log") {
@@ -189,11 +254,6 @@ void handle(SOCKET s) {
   if (path == "/lyrics") {
     std::string json = lyrics::find(query["artist"], query["title"], query["album"], atoi(query["duration"].c_str()));
     return respond(s, 200, json, "application/json; charset=utf-8");
-  }
-
-  if (path == "/logout") {
-    auth::logout();
-    return redirect(s, "/");
   }
 
   serveStatic(s, path);

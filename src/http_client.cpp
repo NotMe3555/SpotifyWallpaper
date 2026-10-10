@@ -49,11 +49,10 @@ HttpResponse httpRequest(const std::wstring& method, const std::wstring& url,
     WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
                         &status, &len, WINHTTP_NO_HEADER_INDEX);
     res.status = (int)status;
-    DWORD retry = 0;
+    wchar_t retry[32] = {};
     len = sizeof retry;
-    if (WinHttpQueryHeaders(req, WINHTTP_QUERY_RETRY_AFTER | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
-                            &retry, &len, WINHTTP_NO_HEADER_INDEX))
-      res.retryAfterSec = (int)retry;
+    if (WinHttpQueryHeaders(req, WINHTTP_QUERY_CUSTOM, L"Retry-After", retry, &len, WINHTTP_NO_HEADER_INDEX))
+      res.retryAfterSec = _wtoi(retry);
     for (;;) {
       DWORD avail = 0;
       if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0) break;

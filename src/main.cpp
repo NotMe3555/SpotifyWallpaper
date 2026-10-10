@@ -23,6 +23,7 @@
 
 #include "audio.h"
 #include "auth.h"
+#include "media.h"
 #include "resource.h"
 #include "server.h"
 #include "settings.h"
@@ -50,10 +51,10 @@ constexpr float kBaseW = 860, kBaseH = 642, kBaseLeftW = 340;
 constexpr float kMinZoom = 0.62f, kMaxZoom = 1.3f;
 constexpr float kFieldH = 40;
 constexpr float kContentY = 140;
-constexpr float kIdFieldY = 184, kSecretFieldY = 256, kRedirectFieldY = 328, kYoutubeFieldY = 496;
+constexpr float kYoutubeFieldY = 184, kStartupRowY = 262;
 
 enum : UINT {
-  WM_APP_AUTH = WM_APP + 1, WM_APP_PLAYER, WM_APP_ART, WM_APP_TOAST, WM_APP_TRAY, WM_APP_NAME, WM_APP_SHOW,
+  WM_APP_MEDIA = WM_APP + 1, WM_APP_PLAYER, WM_APP_ART, WM_APP_TOAST, WM_APP_TRAY, WM_APP_NAME, WM_APP_SHOW,
   WM_APP_SPECTRUM
 };
 
@@ -61,7 +62,7 @@ enum Hit { kNone, kPrev, kPlay, kNext, kEye, kCopyRedirect, kDashboard, kConnect
            kEyeYoutube, kYoutubeLink };
 constexpr int kTabHit = 100, kRowHit = 200, kHitMax = 400;
 enum Tab { kTabAccount, kTabDisplay, kTabCustomize, kTabCount };
-const wchar_t* const kTabNames[kTabCount] = {L"Account", L"Display", L"Customize"};
+const wchar_t* const kTabNames[kTabCount] = {L"General", L"Display", L"Customize"};
 enum { kEditId = 101, kEditSecret = 102, kEditYoutube = 103, kTimerAnim = 1, kTrayId = 1 };
 enum { kMenuOpen = 1, kMenuWallpaper, kMenuToggleWallpaper, kMenuQuit };
 
@@ -110,7 +111,8 @@ const std::vector<Row> kRows = {
 
     {kTabCustomize, "background", L"Background", L"What fills the screen behind the player.",
      {{"art", L"Blurred album art"}, {"glow", L"Soft color glow"}, {"solid", L"Solid color"},
-      {"gradient", L"Gradient"}, {"black", L"Pure black"}}},
+      {"gradient", L"Gradient"}, {"black", L"Pure black"}, {"custom", L"Your image or video"}}},
+    {kTabCustomize, "bgFile", L"Background file", L"An image, GIF or MP4 of your own.", {}},
     {kTabCustomize, "bgColor", L"Background color", L"Solid color, gradient start, and base under the art.", {}},
     {kTabCustomize, "bgColor2", L"Gradient end color", L"Used by the Gradient background.", {}},
     {kTabCustomize, "brightness", L"Art brightness", L"", {{"dim", L"Dim"}, {"normal", L"Normal"}, {"bright", L"Bright"}}},
@@ -190,7 +192,7 @@ const COLORREF kFieldRef = RGB(0x18, 0x1A, 0x20), kTextRef = RGB(0xEE, 0xF0, 0xF
 
 struct App {
   HINSTANCE inst{};
-  HWND hwnd{}, editId{}, editSecret{}, editYoutube{};
+  HWND hwnd{}, editYoutube{};
   UINT dpi = 96;
   float scale = 1;
   HFONT editFont{};
@@ -232,7 +234,7 @@ struct App {
   ComPtr<ID2D1Bitmap> artBmp, prevArtBmp;
   float artFade = 1;
 
-  bool connected = false;
+  bool connected = true;
   std::wstring displayName;
   std::string serverError;
   std::wstring toast;
@@ -312,7 +314,10 @@ void enableDarkMenus() {
 
 
 bool isColorRow(const Row& r) { return std::string(r.key) == "bgColor" || std::string(r.key) == "bgColor2"; }
-bool isSwitchRow(const Row& r) { return r.choices.empty() && !isColorRow(r) && std::string(r.key) != "monitor"; }
+bool isFileRow(const Row& r) { return std::string(r.key) == "bgFile"; }
+bool isSwitchRow(const Row& r) {
+  return r.choices.empty() && !isColorRow(r) && !isFileRow(r) && std::string(r.key) != "monitor";
+}
 
 COLORREF parseHex(const std::string& hex) {
   unsigned v = 0;
@@ -367,6 +372,10 @@ std::wstring choiceLabel(const Row& r) {
     std::wstring w = widen(v);
     CharUpperBuffW(w.data(), (DWORD)w.size());
     return w;
+  }
+  if (isFileRow(r)) {
+    std::wstring path = widen(v);
+    return path.empty() ? L"Choose a file…" : path.substr(path.find_last_of(L"\\/") + 1);
   }
   std::vector<std::wstring> labels;
   std::vector<Choice> choices = std::string(r.key) == "monitor" ? monitorChoices(labels) : r.choices;
@@ -723,10 +732,6 @@ void drawNowPlaying(D2D1_COLOR_F accent, float t) {
   text(has && p.playing ? kGlyphPause : kGlyphPlay, play, g.fIconLg.Get(), has ? hex(0x0B0C0F) : alpha(kText2, .35f),
        DWRITE_TEXT_ALIGNMENT_CENTER);
 
-  if (has && !p.device.empty())
-    text(L"Listening on " + widen(p.device), {24, 528, W - 24, 546}, g.fSmall.Get(), kText3,
-         DWRITE_TEXT_ALIGNMENT_CENTER);
-
   g.rt->SetTransform(D2D1::Matrix3x2F::Identity());
   g.hotOffsetY = 0;
 
@@ -813,52 +818,6 @@ void drawRow(size_t index, float y, float height, D2D1_COLOR_F accent) {
 
 void drawAccountTab(D2D1_COLOR_F accent) {
   const float R0 = g.R0, R1 = g.R1;
-  sectionLabel(L"SPOTIFY APP", kContentY);
-  {
-    std::wstring link = L"Developer dashboard";
-    float lw = measure(link, g.fSmall.Get());
-    D2D1_RECT_F r = {R1 - lw - 20, kContentY - 4, R1, kContentY + 18};
-    float h = ease(g.anim[kDashboard]);
-    addHot(r, kDashboard);
-    D2D1_COLOR_F c = mix(alpha(accent, .85f), accent, h);
-    text(link, {r.left, r.top, r.right - 18, r.bottom}, g.fSmall.Get(), c);
-    text(kGlyphOpen, {r.right - 14, r.top, r.right, r.bottom}, g.fIcon.Get(), c, DWRITE_TEXT_ALIGNMENT_CENTER);
-    if (h > 0.01f) {
-      g.brush->SetColor(alpha(c, .6f * h));
-      g.rt->FillRectangle({r.left, r.bottom - 3, r.right - 18, r.bottom - 2}, g.brush.Get());
-    }
-  }
-
-  text(L"Client ID", {R0, kIdFieldY - 22, R1, kIdFieldY - 4}, g.fFieldLabel.Get(), kText2);
-  field({R0, kIdFieldY, R1, kIdFieldY + kFieldH}, g.focusedEdit == kEditId, accent);
-
-  text(L"Client Secret", {R0, kSecretFieldY - 22, R1, kSecretFieldY - 4}, g.fFieldLabel.Get(), kText2);
-  field({R0, kSecretFieldY, R1, kSecretFieldY + kFieldH}, g.focusedEdit == kEditSecret, accent);
-  iconButton(kEye, rect(R1 - 38, kSecretFieldY + 4, 32, 32), g.secretVisible ? kGlyphHide : kGlyphShow);
-
-  text(L"Redirect URI", {R0, kRedirectFieldY - 22, R1, kRedirectFieldY - 4}, g.fFieldLabel.Get(), kText2);
-  D2D1_RECT_F redirect = {R0, kRedirectFieldY, R1, kRedirectFieldY + kFieldH};
-  fillRound(redirect, 10, hex(0xFFFFFF, .025f));
-  strokeRound(redirect, 10, kLine);
-  text(widen(auth::kRedirectUri), {R0 + 14, redirect.top, R1 - 44, redirect.bottom}, g.fBody.Get(), kText2);
-  iconButton(kCopyRedirect, rect(R1 - 38, kRedirectFieldY + 4, 32, 32), kGlyphCopy);
-  text(L"Add this exact address under Redirect URIs in your Spotify app.",
-       {R0, kRedirectFieldY + kFieldH + 6, R1, kRedirectFieldY + kFieldH + 24}, g.fSmall.Get(), kText3);
-
-
-  D2D1_RECT_F btn = {R0, 408, R1, 452};
-  float h = ease(g.anim[kConnect]);
-  addHot(btn, kConnect);
-  if (g.connected) {
-    fillRound(btn, 12, hex(0xFFFFFF, .04f + .04f * h));
-    strokeRound(btn, 12, hex(0xFFFFFF, .12f + .06f * h));
-    text(L"Disconnect", btn, g.fButton.Get(), mix(kText2, kText, h), DWRITE_TEXT_ALIGNMENT_CENTER);
-  } else {
-    fillRound(btn, 12, mix(hex(0xE9ECF2), hex(0xFFFFFF), h));
-    text(L"Connect Spotify", btn, g.fButton.Get(), hex(0x0B0C0F), DWRITE_TEXT_ALIGNMENT_CENTER);
-  }
-
-
   sectionLabel(L"YOUTUBE (OPTIONAL)", kYoutubeFieldY - 24);
   {
     std::wstring link = L"Get a free API key";
@@ -876,7 +835,7 @@ void drawAccountTab(D2D1_COLOR_F accent) {
        {R0, kYoutubeFieldY + kFieldH + 6, R1, kYoutubeFieldY + kFieldH + 24}, g.fSmall.Get(), kText3);
 
   for (size_t i = 0; i < kRows.size(); ++i)
-    if (kRows[i].tab == kTabAccount) drawRow(i, 565, 36, accent);
+    if (kRows[i].tab == kTabAccount) drawRow(i, kStartupRowY, 36, accent);
 }
 
 
@@ -915,8 +874,12 @@ void drawCustomizeTab(D2D1_COLOR_F accent) {
       compact = s.compact;
     }
     if (!strcmp(kRows[i].key, "visualizer") && settings::on("video") && auth::youtubeKey().empty()) {
-      text(L"Music videos need a YouTube API key — add one in the Account tab.", {R0, y - 6, R1, y + 14},
+      text(L"Music videos need a YouTube API key — add one in the General tab.", {R0, y - 6, R1, y + 14},
            g.fSmall.Get(), kAmber);
+      y += 22;
+    } else if (!strcmp(kRows[i].key, "visualizer") && settings::on("video") && youtube::quotaExceeded()) {
+      text(L"YouTube's 100 searches a day are used up — new songs get videos again after midnight Pacific.",
+           {R0, y - 6, R1, y + 14}, g.fSmall.Get(), kAmber);
       y += 22;
     }
     drawRow(i, y, compact ? 30.f : 40.f, accent);
@@ -967,22 +930,19 @@ void drawCustomizeTab(D2D1_COLOR_F accent) {
 
 void drawSettings(D2D1_COLOR_F accent) {
   const float R0 = g.R0, R1 = g.R1;
-  auto creds = auth::credentials();
-  bool hasCreds = !creds.clientId.empty() && !creds.clientSecret.empty();
+  bool open = media::state().open;
 
 
   text(kAppName, {R0, 22, R1 - 140, 48}, g.fTitle.Get(), kText);
-  std::wstring sub = g.connected ? (g.displayName.empty() ? L"Signed in to Spotify" : L"Signed in as " + g.displayName)
-                     : hasCreds  ? L"Ready to connect"
-                                 : L"Add your Spotify app to get started";
+  std::wstring sub = open ? L"Following the Spotify app on this PC" : L"Open Spotify on this PC to get started";
   text(sub, {R0, 48, R1 - 130, 68}, g.fSub.Get(), kText2);
 
-  std::wstring pillText = g.connected ? L"Connected" : L"Not connected";
+  std::wstring pillText = open ? L"Spotify open" : L"Spotify closed";
   float pw = measure(pillText, g.fSmall.Get()) + 36;
   D2D1_RECT_F pill = {R1 - pw, 30, R1, 56};
   fillRound(pill, 13, hex(0xFFFFFF, .05f));
   strokeRound(pill, 13, kLine);
-  D2D1_COLOR_F dot = g.connected ? kGreen : kAmber;
+  D2D1_COLOR_F dot = open ? kGreen : kAmber;
   fillCircle(pill.left + 15, 43, 6.5f, alpha(dot, .22f));
   fillCircle(pill.left + 15, 43, 3.5f, dot);
   text(pillText, {pill.left + 26, pill.top, pill.right - 6, pill.bottom}, g.fSmall.Get(), kText2);
@@ -1056,10 +1016,8 @@ void createEditFont() {
   SelectObject(dc, old);
   ReleaseDC(g.hwnd, dc);
   g.editLineH = tm.tmHeight + 2;
-  for (HWND e : {g.editId, g.editSecret, g.editYoutube}) {
-    SendMessageW(e, WM_SETFONT, (WPARAM)g.editFont, TRUE);
-    SendMessageW(e, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
-  }
+  SendMessageW(g.editYoutube, WM_SETFONT, (WPARAM)g.editFont, TRUE);
+  SendMessageW(g.editYoutube, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN, 0);
 }
 
 void placeEdit(HWND e, float fieldY, float rightInset) {
@@ -1070,7 +1028,7 @@ void placeEdit(HWND e, float fieldY, float rightInset) {
 }
 
 void layout() {
-  if (!g.editId) return;
+  if (!g.editYoutube) return;
   RECT rc;
   GetClientRect(g.hwnd, &rc);
   float cw = rc.right / g.scale, ch = rc.bottom / g.scale;
@@ -1083,11 +1041,8 @@ void layout() {
   g.R0 = g.leftW + 28;
   g.R1 = g.W - 28;
   createEditFont();
-  placeEdit(g.editId, kIdFieldY, 14);
-  placeEdit(g.editSecret, kSecretFieldY, 46);
   placeEdit(g.editYoutube, kYoutubeFieldY, 46);
-  int show = g.tab == kTabAccount ? SW_SHOW : SW_HIDE;
-  for (HWND e : {g.editId, g.editSecret, g.editYoutube}) ShowWindow(e, show);
+  ShowWindow(g.editYoutube, g.tab == kTabAccount ? SW_SHOW : SW_HIDE);
 }
 
 SIZE windowSizeFor(float clientW, float clientH) {
@@ -1197,15 +1152,6 @@ bool saveFields() {
     if (auth::saveYoutubeKey(yt)) showToast(yt.empty() ? L"YouTube key removed" : L"YouTube key saved");
     else showToast(L"Couldn't save config.json");
   }
-  auto c = auth::credentials();
-  if (c.fromEnvironment) return true;
-  std::string id = editText(g.editId), secret = editText(g.editSecret);
-  if (id == c.clientId && secret == c.clientSecret) return true;
-  if (!auth::saveCredentials(id, secret)) {
-    showToast(L"Couldn't save config.json");
-    return false;
-  }
-  showToast(L"Saved");
   return true;
 }
 
@@ -1321,9 +1267,30 @@ void openColorMenu(const Row& r) {
   }
 }
 
+bool chooseBackgroundFile() {
+  wchar_t path[MAX_PATH] = {};
+  wcsncpy_s(path, widen(settings::get("bgFile")).c_str(), _TRUNCATE);
+  OPENFILENAMEW ofn{sizeof ofn};
+  ofn.hwndOwner = g.hwnd;
+  ofn.lpstrFilter = L"Images and videos\0*.png;*.jpg;*.jpeg;*.webp;*.gif;*.mp4;*.webm\0";
+  ofn.lpstrFile = path;
+  ofn.nMaxFile = MAX_PATH;
+  ofn.lpstrTitle = L"Choose a background";
+  ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+  if (!GetOpenFileNameW(&ofn)) return false;
+  settings::set("bgFile", narrow(path));
+  settings::set("background", "custom");
+  applySetting("background");
+  return true;
+}
+
 void openChoiceMenu(size_t index) {
   const Row& r = kRows[index];
   if (isColorRow(r)) return openColorMenu(r);
+  if (isFileRow(r)) {
+    chooseBackgroundFile();
+    return;
+  }
   std::vector<std::wstring> labels;
   std::vector<Choice> choices = std::string(r.key) == "monitor" ? monitorChoices(labels) : r.choices;
   std::string current = rowValue(r);
@@ -1336,8 +1303,13 @@ void openChoiceMenu(size_t index) {
   GetCursorPos(&pt);
   int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, g.hwnd, nullptr);
   DestroyMenu(m);
-  if (cmd > 0 && (size_t)cmd <= choices.size() && current != choices[cmd - 1].value)
-    setRow(r, choices[cmd - 1].value);
+  if (cmd <= 0 || (size_t)cmd > choices.size() || current == choices[cmd - 1].value) return;
+  std::string picked = choices[cmd - 1].value;
+  if (std::string(r.key) == "background" && picked == "custom" && settings::get("bgFile").empty()) {
+    chooseBackgroundFile();
+    return;
+  }
+  setRow(r, picked);
 }
 
 void selectTab(int tab) {
@@ -1361,19 +1333,12 @@ void onClick(int id) {
     case kPlay: togglePlay(); break;
     case kPrev: runCommand(spotify::Command::Previous); break;
     case kNext: runCommand(spotify::Command::Next); break;
-    case kEye:
-      g.secretVisible = !g.secretVisible;
-      SendMessageW(g.editSecret, EM_SETPASSWORDCHAR, g.secretVisible ? 0 : 0x25CF, 0);
-      InvalidateRect(g.editSecret, nullptr, TRUE);
-      break;
-    case kCopyRedirect:
     case kCopyUrl:
-      copyToClipboard(id == kCopyUrl ? kWallpaperUrl : widen(auth::kRedirectUri));
+      copyToClipboard(kWallpaperUrl);
       g.copiedId = id;
       g.copiedAt = Clock::now();
       showToast(L"Copied to clipboard");
       break;
-    case kDashboard: openUrl(L"https://developer.spotify.com/dashboard"); break;
     case kYoutubeLink: openUrl(L"https://console.cloud.google.com/apis/library/youtube.googleapis.com"); break;
     case kEyeYoutube:
       g.youtubeVisible = !g.youtubeVisible;
@@ -1381,16 +1346,6 @@ void onClick(int id) {
       InvalidateRect(g.editYoutube, nullptr, TRUE);
       break;
     case kOpenUrl: openUrl(kWallpaperUrl); break;
-    case kConnect:
-      if (g.connected) {
-        auth::logout();
-        showToast(L"Disconnected from Spotify");
-      } else if (saveFields()) {
-        if (!auth::hasCredentials()) showToast(L"Enter your Client ID and Client Secret first");
-        else if (!g.serverError.empty()) showToast(widen(g.serverError));
-        else openUrl(std::wstring(kWallpaperUrl) + L"/login");
-      }
-      break;
     case kReset:
       settings::resetLook();
       pushLookToWallpaper();
@@ -1421,24 +1376,12 @@ void refreshHover() {
 void pollLoop() {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   std::string lastArt;
-  bool needName = true;
   while (!g.quitting) {
     DWORD wait = 5000;
-    bool visible = IsWindowVisible(g.hwnd) && !IsIconic(g.hwnd);
-    if (!auth::isConnected()) {
-      needName = true;
-      lastArt.clear();
-    } else if (visible) {
-      if (needName) {
-        std::string name = spotify::fetchDisplayName();
-        if (!name.empty()) {
-          needName = false;
-          PostMessageW(g.hwnd, WM_APP_NAME, 0, (LPARAM) new std::wstring(widen(name)));
-        }
-      }
+    if (IsWindowVisible(g.hwnd) && !IsIconic(g.hwnd)) {
       auto* p = new spotify::Player(spotify::fetchPlayer());
-      wait = p->status == 429 ? std::max(p->retryAfterSec, 5) * 1000 : visible ? 2000 : 5000;
-      std::string artUrl = p->ok ? p->artUrl : lastArt;
+      wait = 2000;
+      std::string artUrl = p->artUrl;
       PostMessageW(g.hwnd, WM_APP_PLAYER, 0, (LPARAM)p);
       if (artUrl != lastArt) {
         lastArt = artUrl;
@@ -1462,7 +1405,6 @@ void setArt(std::shared_ptr<spotify::Art> art) {
 }
 
 void onPlayer(std::unique_ptr<spotify::Player> p) {
-  if (!p->ok || !g.connected) return;
   bool locked = Clock::now() < g.playLockUntil;
   bool playing = locked ? g.player.playing : p->playing;
   std::string oldUrl = g.player.artUrl;
@@ -1572,7 +1514,7 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     case WM_COMMAND: {
       int id = LOWORD(wp), code = HIWORD(wp);
-      if (id == kEditId || id == kEditSecret || id == kEditYoutube) {
+      if (id == kEditYoutube) {
         if (code == EN_SETFOCUS) g.focusedEdit = id;
         if (code == EN_KILLFOCUS) {
           if (g.focusedEdit == id) g.focusedEdit = 0;
@@ -1615,31 +1557,15 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_EXITSIZEMOVE: saveWindowSize(); return 0;
 
-    case WM_APP_AUTH: {
-      bool was = g.connected;
-      g.connected = auth::isConnected();
-      if (!g.connected) {
-        g.player = {};
-        g.displayName.clear();
-        setArt(nullptr);
-        updateTrayTip();
-      } else if (!was) {
-        showToast(L"Connected to Spotify");
-      }
+    case WM_APP_MEDIA:
+      wallpaper::runScript(L"window.pollNow && window.pollNow()");
       SetEvent(g.wake);
       invalidate();
       return 0;
-    }
     case WM_APP_PLAYER: onPlayer(std::unique_ptr<spotify::Player>((spotify::Player*)lp)); return 0;
     case WM_APP_ART: {
       std::shared_ptr<spotify::Art> art((spotify::Art*)lp);
       if (g.connected && g.player.hasItem && art->url == g.player.artUrl) setArt(art);
-      invalidate();
-      return 0;
-    }
-    case WM_APP_NAME: {
-      std::unique_ptr<std::wstring> name((std::wstring*)lp);
-      g.displayName = *name;
       invalidate();
       return 0;
     }
@@ -1730,7 +1656,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
   createFormats();
   g.fieldBrush = CreateSolidBrush(kFieldRef);
   g.startup = startupEnabled();
-  g.connected = auth::isConnected();
   g.rowOn.resize(kRows.size());
   for (size_t i = 0; i < kRows.size(); ++i) g.rowOn[i] = rowValue(kRows[i]) == "on" ? 1.f : 0.f;
   g.wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -1755,18 +1680,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
   COLORREF caption = RGB(0x10, 0x11, 0x16);
   DwmSetWindowAttribute(g.hwnd, 35 , &caption, sizeof caption);
 
-  auto creds = auth::credentials();
-  g.editId = makeEdit(kEditId, creds.clientId, L"Paste your app's Client ID", 0);
-  g.editSecret = makeEdit(kEditSecret, creds.clientSecret, L"Paste your app's Client Secret", ES_PASSWORD);
   g.editYoutube = makeEdit(kEditYoutube, auth::youtubeKey(), L"Paste a YouTube Data API key", ES_PASSWORD);
-  if (creds.fromEnvironment)
-    for (HWND e : {g.editId, g.editSecret}) SendMessageW(e, EM_SETREADONLY, TRUE, 0);
 
   g.dpi = GetDpiForWindow(g.hwnd);
   g.scale = g.dpi / 96.f;
   placeInitialWindow();
   layout();
-  auth::setNotifyWindow(g.hwnd, WM_APP_AUTH);
+  media::start([] { PostMessageW(g.hwnd, WM_APP_MEDIA, 0, 0); });
   addTray();
   if (!startHidden) {
     ShowWindow(g.hwnd, SW_SHOW);

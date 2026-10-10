@@ -29,6 +29,7 @@ const Default kDefaults[] = {
     {"motion", "on", true},
 
     {"background", "art", true},
+    {"bgFile", "", false},
     {"bgColor", "#07080b", true},
     {"bgColor2", "#1d1033", true},
     {"brightness", "normal", true},

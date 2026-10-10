@@ -240,8 +240,7 @@ LRESULT CALLBACK hostProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 bool isOurPage(const std::wstring& uri) {
-  if (uri != g_url && uri.rfind(g_url + L"/", 0) != 0) return false;
-  return uri.find(L"/login") == std::wstring::npos && uri.find(L"/callback") == std::wstring::npos;
+  return uri == g_url || uri.rfind(g_url + L"/", 0) == 0;
 }
 
 void configureView(Surface& s) {

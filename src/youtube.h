@@ -14,4 +14,6 @@ std::string findVideo(const std::string& artist, const std::string& title, std::
 
 std::string cleanSongTitle(const std::string& title);
 
+bool quotaExceeded();
+
 }

@@ -8,38 +8,14 @@
 #include <algorithm>
 #include <cmath>
 
-#include "auth.h"
-#include "http_client.h"
 #include "json.h"
+#include "media.h"
 #include "util.h"
 
 using Microsoft::WRL::ComPtr;
 
 namespace spotify {
 namespace {
-
-HttpResponse api(const wchar_t* method, const std::wstring& path) {
-  std::string token = auth::accessToken();
-  if (token.empty()) {
-    HttpResponse r;
-    r.status = 401;
-    return r;
-  }
-  std::vector<std::wstring> headers{L"Authorization: Bearer " + widen(token)};
-  if (wcscmp(method, L"GET") != 0) headers.push_back(L"Content-Length: 0");
-  return httpRequest(method, L"https://api.spotify.com/v1" + path, headers);
-}
-
-std::string explain(const HttpResponse& r) {
-  std::string reason = Json::parse(r.body)["error"]["reason"].str();
-  if (r.status == 404 || reason == "NO_ACTIVE_DEVICE") return "Open Spotify on a device to start listening";
-  if (reason == "PREMIUM_REQUIRED") return "Playback controls need Spotify Premium";
-  if (r.status == 401) return "You're signed out. Connect Spotify again";
-  if (r.status == 403) return "That action isn't allowed right now";
-  if (r.status == 429) return "Spotify is rate limiting. Try again shortly";
-  return "Couldn't reach Spotify";
-}
-
 
 void extractAccent(const uint8_t* px, uint32_t w, uint32_t h, float out[3]) {
   double r = 0, g = 0, b = 0, wt = 0;
@@ -77,63 +53,60 @@ void extractAccent(const uint8_t* px, uint32_t w, uint32_t h, float out[3]) {
   out[2] = (float)f(hue - 1.0 / 3);
 }
 
+std::string artUrl(const media::State& s) {
+  return s.artVersion ? "/art?v=" + std::to_string(s.artVersion) : std::string();
 }
 
+// Windows gives no track id, so the same title, artist and album count as the same track.
+std::string trackId(const media::State& s) {
+  uint32_t h = 2166136261u;
+  for (unsigned char c : s.title + "\n" + s.artist + "\n" + s.album) h = (h ^ c) * 16777619u;
+  return std::to_string(h);
+}
+
+}
+
+// Everything here comes from the Spotify app on this PC through Windows; nothing calls Spotify's web API.
 Player fetchPlayer() {
   Player p;
-  HttpResponse r = api(L"GET", L"/me/player?additional_types=track,episode");
-  p.status = r.status;
-  p.retryAfterSec = r.retryAfterSec;
-  if (r.status == 204) {
-    p.ok = true;
-    return p;
-  }
-  if (r.status != 200) return p;
-  Json d = Json::parse(r.body);
-  p.ok = true;
-  const Json& item = d["item"];
-  if (!item.isObject()) return p;
+  media::State s = media::state();
+  if (!s.open || s.title.empty()) return p;
   p.hasItem = true;
-  p.playing = d["is_playing"].boolean();
-  p.progressMs = (int64_t)d["progress_ms"].num();
-  p.durationMs = (int64_t)item["duration_ms"].num();
-  p.id = item["id"].str(item["uri"].str(item["name"].str()));
-  p.title = item["name"].str();
-  p.device = d["device"]["name"].str();
-  const Json* images;
-  if (item["type"].str() == "episode") {
-    p.artist = item["show"]["name"].str();
-    images = item["images"].size() ? &item["images"] : &item["show"]["images"];
-  } else {
-    for (size_t i = 0; i < item["artists"].size(); ++i) {
-      if (i) p.artist += ", ";
-      p.artist += item["artists"][i]["name"].str();
-    }
-    p.album = item["album"]["name"].str();
-    images = &item["album"]["images"];
-  }
-
-  size_t pick = images->size() > 1 ? 1 : 0;
-  p.artUrl = (*images)[pick]["url"].str();
+  p.playing = s.playing;
+  p.progressMs = s.positionMs;
+  p.durationMs = s.durationMs;
+  p.id = trackId(s);
+  p.title = s.title;
+  p.artist = s.artist;
+  p.album = s.album;
+  p.artUrl = artUrl(s);
   return p;
 }
 
-std::string fetchDisplayName() {
-  HttpResponse r = api(L"GET", L"/me");
-  if (r.status != 200) return {};
-  Json d = Json::parse(r.body);
-  return d["display_name"].str(d["id"].str());
+// Shaped like Spotify's own player response so the wallpaper page reads it the same way.
+std::string playerJson() {
+  media::State s = media::state();
+  if (!s.open || s.title.empty()) return "{\"age\":0,\"player\":null}";
+  std::string art = artUrl(s);
+  int volume = media::volume();
+  return "{\"age\":0,\"player\":{\"is_playing\":" + std::string(s.playing ? "true" : "false") +
+         ",\"progress_ms\":" + std::to_string(s.positionMs) + ",\"item\":{\"id\":" + jsonEscape(trackId(s)) +
+         ",\"type\":\"track\",\"name\":" + jsonEscape(s.title) + ",\"duration_ms\":" + std::to_string(s.durationMs) +
+         ",\"artists\":[{\"name\":" + jsonEscape(s.artist) + "}],\"album\":{\"name\":" + jsonEscape(s.album) +
+         ",\"images\":[" + (art.empty() ? "" : "{\"url\":" + jsonEscape(art) + "}") +
+         "]}},\"device\":{\"name\":\"this PC\",\"supports_volume\":" + (volume < 0 ? "false" : "true") +
+         ",\"volume_percent\":" + (volume < 0 ? "null" : std::to_string(volume)) + "}}}";
 }
 
 bool decodeArt(const std::string& url, Art& out) {
-  HttpResponse r = httpRequest(L"GET", widen(url));
-  if (r.status != 200 || r.body.empty()) return false;
+  std::string bytes = media::art();
+  if (bytes.empty()) return false;
 
   ComPtr<IWICImagingFactory> wic;
   if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))))
     return false;
   ComPtr<IStream> stream;
-  stream.Attach(SHCreateMemStream((const BYTE*)r.body.data(), (UINT)r.body.size()));
+  stream.Attach(SHCreateMemStream((const BYTE*)bytes.data(), (UINT)bytes.size()));
   ComPtr<IWICBitmapDecoder> decoder;
   ComPtr<IWICBitmapFrameDecode> frame;
   ComPtr<IWICFormatConverter> conv;
@@ -155,14 +128,9 @@ bool decodeArt(const std::string& url, Art& out) {
 }
 
 std::string send(Command cmd) {
-  HttpResponse r;
-  switch (cmd) {
-    case Command::Play: r = api(L"PUT", L"/me/player/play"); break;
-    case Command::Pause: r = api(L"PUT", L"/me/player/pause"); break;
-    case Command::Next: r = api(L"POST", L"/me/player/next"); break;
-    case Command::Previous: r = api(L"POST", L"/me/player/previous"); break;
-  }
-  return r.status >= 200 && r.status < 300 ? std::string() : explain(r);
+  static const media::Command map[] = {media::Command::Play, media::Command::Pause, media::Command::Next,
+                                       media::Command::Previous};
+  return media::send(map[(int)cmd]) ? std::string() : "Open Spotify on this PC to control playback";
 }
 
 }
