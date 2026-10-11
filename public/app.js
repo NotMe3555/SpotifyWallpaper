@@ -110,13 +110,20 @@
     body.dataset.position = next.position || 'center';
     body.dataset.shape = next.artShape || 'rounded';
     body.dataset.bg = next.background || 'art';
-    body.dataset.brightness = next.brightness || 'normal';
     body.dataset.blur = next.blur || 'normal';
     body.dataset.videoMode = next.videoMode === 'cover' ? 'cover' : 'background';
     body.dataset.viz = next.visualizer || 'off';
     body.dataset.lyrics = next.lyrics || 'off';
     body.dataset.lyricsSize = next.lyricsSize || 'normal';
     const root = document.documentElement.style;
+    const namedBright = { dim: 45, normal: 70, bright: 100 };
+    const rawBright = namedBright[next.brightness] ?? parseInt(next.brightness, 10);
+    const bgBright = Math.min(100, Math.max(0, Number.isFinite(rawBright) ? rawBright : 70));
+    root.setProperty('--custom-bright', String(bgBright / 100));
+    // Above 45% the album art gets brighter and more solid; below it, it simply fades toward black.
+    const upper = Math.max(0, (bgBright - 45) / 55);
+    root.setProperty('--art-bright', String(0.4 + upper * 0.4));
+    root.setProperty('--art-opacity', String(bgBright >= 45 ? 0.3 + upper * 0.55 : (0.3 * bgBright) / 45));
     root.setProperty('--bg', next.background === 'black' ? '#000000' : next.bgColor || '#07080b');
     root.setProperty('--bg-color2', next.bgColor2 || '#1d1033');
     document.documentElement.style.setProperty('--scale', String((parseInt(next.scale, 10) || 100) / 100));
@@ -298,7 +305,7 @@
     key: null, mode: null, id: null, player: null, shown: false, failed: new Set(),
     candidates: [], playingSince: 0, revealTimer: null, revealDelay: 0,
     loading: false, noMatch: false, retryAt: 0, lastTime: -1, stuckSince: 0,
-    seekAt: 0, settling: false, lead: 0.5,
+    seekAt: 0, settling: false, lead: 0.5, held: false, graceUntil: 0,
   };
   const REVEAL_AFTER_MS = 3500;
   const REVEAL_AGAIN_MS = 1200;
@@ -340,6 +347,7 @@
 
   function resetReveal(delay) {
     video.shown = false;
+    video.held = false;
     video.playingSince = 0;
     video.revealDelay = delay;
     clearTimeout(video.revealTimer);
@@ -444,6 +452,8 @@
             hideCaptions(e.target);
             if (video.key) startReveal();
           } else {
+            if (video.held && e.data === YT.PlayerState.PAUSED) return;
+            if (performance.now() < video.graceUntil && e.data !== YT.PlayerState.ENDED) return;
             cutVideo(e.data === YT.PlayerState.BUFFERING);
           }
         },
@@ -479,7 +489,7 @@
 
 
   function videoGuard() {
-    if (!video.shown) return;
+    if (!video.shown || video.held || performance.now() < video.graceUntil) return;
     const p = video.player;
     if (!isMoving(p)) return cutVideo(playerReady(p) && p.getPlayerState() === YT.PlayerState.BUFFERING);
     if (nearEnd(p)) fadeVideo();
@@ -525,6 +535,7 @@
       startReveal();
       return;
     }
+    if (now < video.graceUntil) return;
     cutVideo(false);
     if (!video.stuckSince) { video.stuckSince = now; return; }
     const stuckFor = now - video.stuckSince;
@@ -579,9 +590,19 @@
     }
     const playing = isMoving(p);
     if (!state.isPlaying) {
-
-      if (playing) fadeVideo(() => { if (!state.isPlaying) pauseQuietly(); });
+      // Paused while the video is on screen: freeze it on its current frame rather than hiding it.
+      if (video.shown) {
+        video.held = true;
+        if (playing) p.pauseVideo();
+      } else if (playing) {
+        fadeVideo(() => { if (!state.isPlaying) pauseQuietly(); });
+      }
       return;
+    }
+    if (video.held) {
+      // Resuming takes the player a moment to start moving again; don't hide the video for that.
+      video.held = false;
+      video.graceUntil = performance.now() + 2500;
     }
     if (!playing) p.playVideo();
     if (force) {

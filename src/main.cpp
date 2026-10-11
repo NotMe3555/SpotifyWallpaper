@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <map>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -50,8 +51,8 @@ constexpr DWORD kStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
 constexpr float kBaseW = 860, kBaseH = 642, kBaseLeftW = 340;
 constexpr float kMinZoom = 0.62f, kMaxZoom = 1.3f;
 constexpr float kFieldH = 40;
-constexpr float kContentY = 140;
-constexpr float kYoutubeFieldY = 184, kStartupRowY = 262;
+constexpr float kContentY = 77;
+constexpr float kYoutubeFieldY = 121, kStartupRowY = 199;
 
 enum : UINT {
   WM_APP_MEDIA = WM_APP + 1, WM_APP_PLAYER, WM_APP_ART, WM_APP_TOAST, WM_APP_TRAY, WM_APP_NAME, WM_APP_SHOW,
@@ -121,7 +122,7 @@ const std::vector<Row> kRows = {
       {"300", L"5 minutes"}, {"900", L"15 minutes"}}},
     {kTabBackground, "bgColor", L"Background color", L"Solid color, gradient start, and base under the art.", {}},
     {kTabBackground, "bgColor2", L"Gradient end color", L"Used by the Gradient background.", {}},
-    {kTabBackground, "brightness", L"Background brightness", L"", {{"dim", L"Dim"}, {"normal", L"Normal"}, {"bright", L"Bright"}}},
+    {kTabBackground, "brightness", L"Background brightness", L"", {}},
     {kTabBackground, "blur", L"Art blur", L"", {{"light", L"Light"}, {"normal", L"Normal"}, {"heavy", L"Heavy"}}},
     {kTabBackground, "vignette", L"Vignette", L"Darkens the edges of the screen.", {}},
     {kTabBackground, "grain", L"Film grain", L"A subtle texture over the background.", {}},
@@ -129,8 +130,7 @@ const std::vector<Row> kRows = {
     {kTabBackground, "video", L"Music videos", L"Plays the official video, muted and synced, when one exists.", {}},
     {kTabBackground, "videoMode", L"Show the video", L"",
      {{"background", L"As the background"}, {"cover", L"In place of the cover"}}},
-    {kTabBackground, "videoBrightness", L"Video brightness", L"Dims the music video so the player stays readable.",
-     {{"30", L"30%"}, {"45", L"45%"}, {"60", L"60%"}, {"75", L"75%"}, {"90", L"90%"}, {"100", L"100%"}}},
+    {kTabBackground, "videoBrightness", L"Video brightness", L"Dims the music video so the player stays readable.", {}},
     {kTabSpotify, "visualizer", L"Visualizer", L"Reacts to the music playing on your PC.",
      {{"off", L"Off"}, {"ring", L"Ring around the cover"}, {"bars", L"Bars along the bottom"},
       {"both", L"Ring and bars"}}},
@@ -229,6 +229,8 @@ struct App {
   D2D1_RECT_F hotClip = {-1e9f, -1e9f, 1e9f, 1e9f};
   float scrollY = 0, scrollTarget = 0, scrollMax = 0;
   std::vector<std::string> slots;
+  int dragSlider = -1;
+  std::map<size_t, std::pair<float, float>> sliderSpan;
   int hover = kNone, pressed = kNone, focusedEdit = 0;
   bool trackingMouse = false;
   float anim[kHitMax] = {};
@@ -358,8 +360,21 @@ bool rowVisible(const Row& r) {
   if (key == "clock24") return settings::on("clock");
   return true;
 }
+// Rows whose value is a percentage, set by dragging.
+struct SliderRange {
+  const char* key;
+  int min, max;
+};
+const SliderRange kSliders[] = {{"brightness", 1, 100}, {"videoBrightness", 1, 100}};
+
+const SliderRange* sliderFor(const Row& r) {
+  for (auto& s : kSliders)
+    if (!strcmp(s.key, r.key)) return &s;
+  return nullptr;
+}
+
 bool isSwitchRow(const Row& r) {
-  return r.choices.empty() && !isColorRow(r) && !isFileRow(r) && std::string(r.key) != "monitor";
+  return r.choices.empty() && !isColorRow(r) && !isFileRow(r) && !sliderFor(r) && std::string(r.key) != "monitor";
 }
 
 COLORREF parseHex(const std::string& hex) {
@@ -792,14 +807,17 @@ void drawNowPlaying(D2D1_COLOR_F accent, float t) {
 
 
 
+// The tabs share the top row with the Spotify badge, so they stop short of it.
+float tabsRight() { return g.R1 - (measure(L"Spotify closed", g.fSmall.Get()) + 36) - 12; }
+
 D2D1_RECT_F tabRect(int i) {
-  float w = (g.R1 - g.R0 - 8) / (float)kTabCount;
-  return {g.R0 + 4 + i * w, 92, g.R0 + 4 + (i + 1) * w, 120};
+  float w = (tabsRight() - g.R0 - 8) / (float)kTabCount;
+  return {g.R0 + 4 + i * w, 29, g.R0 + 4 + (i + 1) * w, 57};
 }
 
 void drawTabs(D2D1_COLOR_F accent) {
-  fillRound({g.R0, 88, g.R1, 124}, 12, hex(0xFFFFFF, .04f));
-  strokeRound({g.R0, 88, g.R1, 124}, 12, kLine);
+  fillRound({g.R0, 25, tabsRight(), 61}, 12, hex(0xFFFFFF, .04f));
+  strokeRound({g.R0, 25, tabsRight(), 61}, 12, kLine);
 
   D2D1_RECT_F a = tabRect(0);
   float w = a.right - a.left, x = a.left + w * g.tabAnim;
@@ -826,6 +844,18 @@ void drawRow(size_t index, float y, float height, D2D1_COLOR_F accent) {
   if (isSwitchRow(r)) {
     switchKnob(right, y + height / 2, g.rowOn[index], h, accent);
     right -= 60;
+  } else if (const SliderRange* s = sliderFor(r)) {
+    int v = std::clamp(atoi(rowValue(r).c_str()), s->min, s->max);
+    float x1 = g.R1 - 10, x0 = x1 - 190, cy = y + height / 2;
+    float kx = x0 + (v - s->min) / (float)(s->max - s->min) * (x1 - x0);
+    bool dragging = g.dragSlider == (int)index;
+    fillRound({x0, cy - 2, x1, cy + 2}, 2, hex(0xFFFFFF, .12f));
+    fillRound({x0, cy - 2, kx, cy + 2}, 2, alpha(accent, .9f));
+    if (dragging) fillCircle(kx, cy, 14, alpha(accent, .18f));
+    fillCircle(kx, cy, dragging ? 8.5f : 7 + h, hex(0xF2F4F8));
+    text(std::to_wstring(v) + L"%", {x0 - 62, y, x0 - 16, y + height}, g.fSmall.Get(), kText, DWRITE_TEXT_ALIGNMENT_TRAILING);
+    g.sliderSpan[index] = {x0, x1};
+    right = x0 - 68;
   } else {
     std::wstring label = choiceLabel(r);
     bool color = isColorRow(r);
@@ -857,7 +887,7 @@ void drawRow(size_t index, float y, float height, D2D1_COLOR_F accent) {
 
 void drawAccountTab(D2D1_COLOR_F accent) {
   const float R0 = g.R0, R1 = g.R1;
-  sectionLabel(L"YOUTUBE KEY (OPTIONAL)", kYoutubeFieldY - 24);
+  sectionLabel(L"YOUTUBE KEY (FOR MUSIC VIDEOS)", kYoutubeFieldY - 24);
   {
     std::wstring link = L"Get a free API key";
     float lw = measure(link, g.fSmall.Get());
@@ -1039,9 +1069,6 @@ void drawSettings(D2D1_COLOR_F accent) {
   bool open = media::state().open;
 
 
-  text(kAppName, {R0, 22, R1 - 140, 48}, g.fTitle.Get(), kText);
-  std::wstring sub = open ? L"Following the Spotify app on this PC" : L"Open Spotify on this PC to get started";
-  text(sub, {R0, 48, R1 - 130, 68}, g.fSub.Get(), kText2);
 
   std::wstring pillText = open ? L"Spotify open" : L"Spotify closed";
   float pw = measure(pillText, g.fSmall.Get()) + 36;
@@ -1442,6 +1469,7 @@ void onClick(int id) {
   } else if (id >= kRowHit && id < kRowHit + (int)kRows.size()) {
     size_t index = id - kRowHit;
     const Row& r = kRows[index];
+    if (sliderFor(r)) return;
     if (isSwitchRow(r)) setRow(r, rowValue(r) == "on" ? "off" : "on");
     else openChoiceMenu(index);
   }
@@ -1535,6 +1563,26 @@ void onPlayer(std::unique_ptr<spotify::Player> p) {
 
 
 
+// Sets the slider being dragged from the mouse position; the wallpaper follows live.
+void dragSliderTo(LPARAM lp) {
+  auto span = g.sliderSpan.find((size_t)g.dragSlider);
+  if (g.dragSlider < 0 || span == g.sliderSpan.end()) return;
+  const Row& r = kRows[g.dragSlider];
+  const SliderRange* s = sliderFor(r);
+  float x0 = span->second.first, x1 = span->second.second;
+  float t = std::clamp((GET_X_LPARAM(lp) / g.ui - x0) / (x1 - x0), 0.f, 1.f);
+  std::string value = std::to_string(s->min + (int)std::lround(t * (s->max - s->min)));
+  if (value != rowValue(r)) setRow(r, value);
+  invalidate();
+}
+
+bool overSlider(int id, LPARAM lp) {
+  if (id < kRowHit || id >= kRowHit + (int)kRows.size() || !sliderFor(kRows[id - kRowHit])) return false;
+  auto span = g.sliderSpan.find((size_t)(id - kRowHit));
+  float x = GET_X_LPARAM(lp) / g.ui;
+  return span != g.sliderSpan.end() && x >= span->second.first - 14 && x <= span->second.second + 14;
+}
+
 LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
   if (msg == g.taskbarCreatedMsg && msg) {
     addTray();
@@ -1575,6 +1623,10 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         TRACKMOUSEEVENT tme{sizeof tme, TME_LEAVE, hwnd, 0};
         g.trackingMouse = TrackMouseEvent(&tme);
       }
+      if (g.dragSlider >= 0) {
+        dragSliderTo(lp);
+        return 0;
+      }
       int h = hitTest(lp);
       if (h != g.hover) {
         g.hover = h;
@@ -1609,11 +1661,16 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
       SetFocus(hwnd);
       g.pressed = hitTest(lp);
       if (g.pressed) SetCapture(hwnd);
+      if (overSlider(g.pressed, lp)) {
+        g.dragSlider = g.pressed - kRowHit;
+        dragSliderTo(lp);
+      }
       invalidate();
       return 0;
     case WM_LBUTTONUP: {
       int id = g.pressed;
       g.pressed = kNone;
+      g.dragSlider = -1;
       ReleaseCapture();
       if (id && id == hitTest(lp)) onClick(id);
       invalidate();

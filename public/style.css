@@ -487,8 +487,6 @@ body[data-shape="vinyl"] .art::after {
 .bg__art.is-visible { opacity: var(--art-opacity, 0.55); }
 body[data-blur="light"] { --art-blur: 40px; }
 body[data-blur="heavy"] { --art-blur: 160px; }
-body[data-brightness="dim"] { --art-bright: 0.4; --art-opacity: 0.3; }
-body[data-brightness="bright"] { --art-bright: 0.8; --art-opacity: 0.85; }
 
 body[data-bg="glow"] .bg__art,
 body[data-bg="solid"] .bg__art,
@@ -519,8 +517,6 @@ body[data-bg="black"] .bg { background: #000; }
 body[data-bg="custom"] .bg__custom { display: block; }
 body[data-bg="custom"] .bg__art,
 body[data-bg="custom"] .bg__glow { display: none; }
-body[data-brightness="dim"] { --custom-bright: 0.45; }
-body[data-brightness="bright"] { --custom-bright: 1; }
 
 .no-vignette .bg__vignette { display: none; }
 
@@ -549,12 +545,14 @@ body[data-brightness="bright"] { --custom-bright: 1; }
   border: 0;
   transform: translate(-50%, -50%);
 }
+/* The player is made much taller than the 16:9 picture. YouTube centres the picture and pins its own title bar
+   and bottom strip to the player's edges, which puts them in the empty bands above and below, out of view. */
 .bg__video iframe {
   width: 1920px;
-  height: 1080px;
+  height: 1680px;
   transform: translate(-50%, -50%) scale(var(--video-fit, 1.2));
 }
-.art__video iframe { width: 177.78%; height: 100%; transform: translate(-50%, -50%) scale(1.25); }
+.art__video iframe { width: 177.78%; height: 160%; transform: translate(-50%, -50%) scale(1.25); }
 .bg__video iframe,
 .art__video iframe { filter: brightness(var(--video-bright, 0.75)); }
 body.has-video[data-video-mode="background"] .bg__video,

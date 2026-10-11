@@ -33,7 +33,7 @@ const Default kDefaults[] = {
     {"bgImageSeconds", "15", true},
     {"bgColor", "#07080b", true},
     {"bgColor2", "#1d1033", true},
-    {"brightness", "normal", true},
+    {"brightness", "70", true},
     {"blur", "normal", true},
     {"vignette", "on", true},
     {"grain", "on", true},
@@ -95,6 +95,11 @@ void init(const std::wstring& dir) {
   }
   if (g_values["bgFiles"].empty()) g_values["bgFiles"] = saved["bgFile"].str();
   g_values.erase("bgFile");
+  // Brightness used to be three named levels; it is a percentage now.
+  std::string& brightness = g_values["brightness"];
+  if (brightness == "dim") brightness = "45";
+  else if (brightness == "bright") brightness = "100";
+  else if (brightness.empty() || !isdigit((unsigned char)brightness[0])) brightness = "70";
 }
 
 std::string get(const std::string& key) {
